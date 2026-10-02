@@ -1,0 +1,1 @@
+"""Flowmint AI Backend Application."""
