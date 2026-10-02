@@ -10,6 +10,9 @@ import InventoryPage from './pages/merchant/InventoryPage';
 import AICopilotPage from './pages/merchant/AICopilotPage';
 import OpportunitiesPage from './pages/merchant/OpportunitiesPage';
 import SimulationsPage from './pages/merchant/SimulationsPage';
+import ApprovalsPage from './pages/merchant/ApprovalsPage';
+import PoliciesPage from './pages/merchant/PoliciesPage';
+import AuditPage from './pages/merchant/AuditPage';
 import StorefrontPage from './pages/buyer/StorefrontPage';
 import type { User } from './types';
 
@@ -64,6 +67,9 @@ export default function App() {
           <Route path="/copilot" element={<AICopilotPage />} />
           <Route path="/opportunities" element={<OpportunitiesPage />} />
           <Route path="/simulations" element={<SimulationsPage />} />
+          <Route path="/approvals" element={<ApprovalsPage />} />
+          <Route path="/policies" element={<PoliciesPage />} />
+          <Route path="/audit" element={<AuditPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/orders" element={<OrdersPage />} />

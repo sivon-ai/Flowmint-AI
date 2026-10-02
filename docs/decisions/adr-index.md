@@ -182,3 +182,25 @@
 
 **Rationale:** Enforces strict bounded autonomy. ActionPlans represent structured proposals for human merchant review and policy evaluation (to be implemented in Phase 3) without risking unauthorized price cuts, unintended customer messaging, or financial losses.
 
+---
+
+## ADR-015: Agent Permission Matrix & Non-Wildcard Capabilities
+
+**Status:** Accepted  
+**Date:** 2026-10-02
+
+**Decision:** Define explicit, non-wildcard permission boundaries for every agent role (`BUYER_AGENT`, `ANALYTICS_AGENT`, `GROWTH_AGENT`, `RECOVERY_AGENT`). Disallow wildcard permissions (`*`). Write tools (`create_campaign_draft`, `create_offer`, `launch_recovery_campaign`) are restricted strictly to authorized agents and can NEVER be called directly by agents or the LLM.
+
+**Rationale:** Prevents privilege escalation and prompt injection attacks from granting an agent mutating capabilities. The agent can only formulate an `ActionPlan` proposal. Mutating actions require traversal through the full security pipeline.
+
+---
+
+## ADR-016: Centralized Action Execution Pipeline, Deterministic Policy/Risk Engines, and Immutable Audit Trail
+
+**Status:** Accepted  
+**Date:** 2026-10-02
+
+**Decision:** Transform recommendations into safe execution via a centralized `ActionExecutionService`. Every consequential action must pass through the pipeline: `Agent -> ActionPlan -> Agent Permission -> Schema Validation -> Policy Engine (9 deterministic rules) -> Risk Engine (deterministic 4-tier) -> Approval Requirement (HITL) -> Central Executor -> Controlled Write Tool -> Outcome -> Immutable Audit Log`. All executions enforce database-level uniqueness on `action_id` and `idempotency_key`. Direct invocation of `/execute` re-evaluates all policy, risk, and approval requirements. Autonomous price mutations and refunds remain strictly forbidden in Phase 3.
+
+**Rationale:** Protects the merchant against financial runaway, unauthorized discounts, cross-tenant leaks, and replay attacks. Establishes an immutable, tamper-evident audit record of every business transition.
+

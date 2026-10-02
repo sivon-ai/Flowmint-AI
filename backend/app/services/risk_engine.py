@@ -60,12 +60,12 @@ class RiskEngine:
             return RiskLevel.HIGH, factors
 
         # 4. Medium Risk Conditions
-        if discount_pct > Decimal("10.00") or budget >= Decimal("5000.00") or est_val >= high_val_threshold:
+        if discount_pct > Decimal("5.00") or budget > Decimal("2000.00") or est_val >= high_val_threshold:
             factors.append("Moderate monetary discount or budget allocation.")
         if affected_count >= 20:
             factors.append(f"Multi-customer impact ({affected_count} entities).")
-        if action_plan.action_type in ("abandoned_cart_recovery", "cross_sell_bundle", "promotional_offer"):
-            factors.append("Promotional offer generation alters checkout basket economics.")
+        if action_plan.action_type == "launch_recovery_campaign":
+            factors.append("Live recovery campaign activation.")
 
         if factors:
             return RiskLevel.MEDIUM, factors

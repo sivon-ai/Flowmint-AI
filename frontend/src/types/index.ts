@@ -171,7 +171,7 @@ export interface ActionPlan {
   estimated_impact?: Record<string, any> | null;
   risk_level: string;
   requires_approval: boolean;
-  status: 'proposed' | 'simulating' | 'ready_for_review' | 'deferred' | 'rejected';
+  status: 'proposed' | 'validating' | 'simulating' | 'ready_for_review' | 'pending_approval' | 'auto_approved' | 'policy_rejected' | 'executing' | 'completed' | 'failed' | 'deferred' | 'rejected' | 'expired';
   created_at: string;
 }
 
@@ -202,5 +202,79 @@ export interface RevenueOverviewMetrics {
   payment_failure_rate: number;
   active_opportunities_count: number;
   inventory_pressure_count: number;
+}
+
+// ==========================================
+// Phase 3: Safety, Governance, Policy & Audit Types
+// ==========================================
+
+export interface Approval {
+  id: string;
+  merchant_id: string;
+  action_plan_id: string;
+  requested_by: string;
+  risk_level: 'low' | 'medium' | 'high' | 'critical';
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
+  expires_at: string;
+  decided_at?: string | null;
+  decided_by?: string | null;
+  decision_reason?: string | null;
+  policy_snapshot: Record<string, any>;
+  action_plan?: ActionPlan | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditLog {
+  id: string;
+  merchant_id: string;
+  event_id: string;
+  actor_type: string;
+  actor_id: string;
+  action_id?: string | null;
+  agent?: string | null;
+  event_type: string;
+  previous_status?: string | null;
+  new_status?: string | null;
+  reason: string;
+  policy_results?: Record<string, any> | null;
+  approval_result?: Record<string, any> | null;
+  execution_result?: Record<string, any> | null;
+  trace_id?: string | null;
+  created_at: string;
+}
+
+export interface MerchantPolicy {
+  id: string;
+  merchant_id: string;
+  max_discount_percentage: number;
+  max_campaign_budget: number;
+  high_value_threshold: number;
+  contact_cooldown_hours: number;
+  require_approval_all_actions: boolean;
+  auto_approval_max_risk: string;
+  allowed_action_types: string[];
+  restricted_product_ids: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PolicyRuleResult {
+  rule: string;
+  passed: boolean;
+  severity: string;
+  reason: string;
+  evidence: Record<string, any>;
+}
+
+export interface PolicyEvaluationResult {
+  allowed: boolean;
+  requires_approval: boolean;
+  risk_level: string;
+  reasons: string[];
+  rule_results: PolicyRuleResult[];
+  evidence_snapshot: Record<string, any>;
 }
 

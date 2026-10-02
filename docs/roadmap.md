@@ -67,15 +67,24 @@
 - [x] Frontend: Growth and Recovery Agent modes in AI Copilot
 - [x] Evaluation & Tests: 104/104 backend tests passing, frontend tests/build passing
 
-## Phase 3: Safety + Governance (Weeks 9–10)
+## Phase 3: Safety, Governance & Controlled Execution (COMPLETE)
 
-- [ ] Policy engine with configurable rules
-- [ ] Risk classification
-- [ ] Approval workflow (UI + API)
-- [ ] Idempotency enforcement for agent actions
-- [ ] Full audit trail (write + read + UI)
-- [ ] Agent observability traces
-- [ ] Agent activity viewer
+- [x] Agent Permission Matrix & Non-Wildcard Capabilities (`BUYER_AGENT`, `ANALYTICS_AGENT`, `GROWTH_AGENT`, `RECOVERY_AGENT`)
+- [x] Deterministic 4-tier Risk Classification Engine (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
+- [x] Policy Rule Framework with 9 configurable deterministic rules
+- [x] Human-in-the-Loop (HITL) Approval Workflow with expiration windows & multi-tenant isolation
+- [x] Centralized Action Execution Service (`ActionExecutionService`)
+- [x] Database-level idempotency protection (`action_id`, `idempotency_key`) preventing replay attacks
+- [x] Controlled write tools registry (`create_campaign_draft`, `create_offer`, `launch_recovery_campaign`)
+- [x] Strict prohibition of refunds and direct price mutations
+- [x] Immutable, tamper-evident Audit Trail (`audit_logs`)
+- [x] Policy Simulator API (`POST /api/v1/policies/evaluate`)
+- [x] Governance APIs (`/policies`, `/actions`, `/approvals`, `/audit`)
+- [x] Alembic migration `004_phase3_safety_governance` applied to live PostgreSQL
+- [x] Frontend: Approval Center page (`/approvals`)
+- [x] Frontend: Policy Engine & Simulator page (`/policies`)
+- [x] Frontend: Audit Trail & Trace Inspector page (`/audit`)
+- [x] 114/114 backend tests passing, frontend tests/typecheck/build passing
 
 ## Phase 4: Evaluation + Launch (Weeks 11–12)
 

@@ -121,3 +121,26 @@ Located in [`app.ai.agents.orchestrator`](file:///d:/Flowmint%20AI/backend/app/a
 - **Output**: Formulates structured `ActionPlan` (`action_type: "abandoned_cart_recovery"` or `"payment_retry_nudge"`, `status: "proposed"`, `requires_approval: True`).
 - **Safety Invariant**: Strictly non-mutating. No emails or WhatsApp messages are sent; no customer records are modified.
 
+---
+
+## 7. Controlled Execution Pipeline & Permission Matrix (Phase 3)
+
+In Phase 3, recommendations from Growth and Recovery Agents transition to safe execution through a central pipeline.
+
+```
+Agent -> ActionPlan -> Agent Permission -> Schema Validation -> Policy Engine -> Risk Engine -> Approval (HITL) -> Idempotent Executor -> Controlled Write Tool -> Outcome -> Audit Log
+```
+
+### Agent Permission Matrix
+- `BUYER_AGENT`: Read catalog, read inventory, create carts. No financial mutations.
+- `ANALYTICS_AGENT`: Read analytics, orders, payments. Strictly no write permissions.
+- `GROWTH_AGENT`: Read commerce telemetry, create campaign/offer proposals. No direct execution without safety pipeline.
+- `RECOVERY_AGENT`: Read recovery data, create recovery proposals. No direct customer communication or payment mutations.
+
+### Invariants
+1. Agents NEVER call write tools directly.
+2. Controlled write tools (`create_campaign_draft`, `create_offer`, `launch_recovery_campaign`) are only invoked by `ActionExecutionService`.
+3. Executions enforce database-level idempotency (`action_id`, `idempotency_key`).
+4. Every state transition is recorded in immutable `audit_logs`.
+5. Direct API calls to `/execute` re-validate all permissions, policies, and human approvals.
+

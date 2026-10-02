@@ -134,9 +134,34 @@ Query params: `q`, `category_id`, `min_price`, `max_price`, `status`, `sort_by`,
 | POST | `/agents/growth` | JWT | Direct Growth Agent recommendation invocation |
 | POST | `/agents/recovery` | JWT | Direct Recovery Agent recommendation invocation |
 
-## Phase 3 Endpoints (Deferred)
-- `/policies` — Merchant business policies and constraints
-- `/approvals` — Human-in-the-loop approval workflows
-- `/actions/:id/execute` — Safe, verified execution engine
-- `/audit` — Tamper-evident execution audit trail
+## Phase 3 Endpoints (Active)
+
+### Policy Engine & Simulator
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/policies/evaluate` | JWT | Policy Simulator: dry-run ActionPlan against all rules without side-effects |
+| GET | `/policies` | JWT | Get active merchant policy configuration |
+| PUT | `/policies` | JWT | Update merchant policy bounds (discount, budget, frequency, etc.) |
+
+### Actions & Execution
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/actions` | JWT | List ActionPlans with governance status |
+| GET | `/actions/:id` | JWT | Get ActionPlan detail with risk, policy, and execution records |
+| POST | `/actions/:id/validate` | JWT | Validate plan against policy engine and determine approval needs |
+| POST | `/actions/:id/execute` | JWT | Central idempotent execution pipeline (enforces policy, approval, uniqueness) |
+
+### Approvals
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/approvals` | JWT | List human approval requests for merchant (`status` filter supported) |
+| GET | `/approvals/:id` | JWT | Get approval detail with policy evaluation snapshot |
+| POST | `/approvals/:id/approve` | JWT | Approve pending action request |
+| POST | `/approvals/:id/reject` | JWT | Reject pending action request with decision reason |
+
+### Audit Trail
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/audit` | JWT | List immutable audit log records for merchant |
+| GET | `/audit/:id` | JWT | Get specific audit log entry with execution & policy payload |
 
