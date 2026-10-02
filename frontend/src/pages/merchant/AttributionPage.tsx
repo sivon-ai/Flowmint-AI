@@ -135,9 +135,12 @@ export default function AttributionPage() {
       <div className="p-4 bg-surface-900/60 border border-surface-700/60 rounded-xl flex items-start gap-3">
         <ShieldAlert className="w-5 h-5 text-brand-400 mt-0.5 shrink-0" />
         <div className="text-xs text-surface-300 space-y-1">
-          <span className="font-semibold text-white">Strict Label Hierarchy: </span>
-          <span className="text-emerald-400 font-bold">OBSERVED</span> represents real post-execution customer transactions.
-          {' '}<span className="text-purple-400 font-bold">SIMULATED</span> and <span className="text-amber-400 font-bold">ESTIMATED</span> represent projected ranges and are never labeled as actual bankable revenue.
+          <div><span className="font-semibold text-white">Strict Label Hierarchy: </span></div>
+          <div>• <span className="text-purple-400 font-bold">SIMULATED</span>: Forward projections from simulation models; never claimed as realized revenue.</div>
+          <div>• <span className="text-amber-400 font-bold">ESTIMATED</span>: Expected value calculated prior to action execution.</div>
+          <div>• <span className="text-emerald-400 font-bold">OBSERVED</span>: Actual recorded customer transactions and captured payments.</div>
+          <div>• <span className="text-blue-400 font-bold">ATTRIBUTED</span>: Calculated net revenue impact after voucher costs and operational deductions.</div>
+          <div>• <span className="text-brand-300 font-bold">DETERMINISTIC EVENT LINK</span>: Direct campaign/cart/coupon linkage; does not imply generalized causality.</div>
         </div>
       </div>
 

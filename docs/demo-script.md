@@ -95,15 +95,15 @@ Prove that Flowmint AI strictly fails closed when an action violates merchant po
    - Policy Engine evaluates `rule_max_discount_cap`: `25.0% > 15.0%` &rarr; **REJECTED**.
    - Action status changes to `BLOCKED`.
    - Action is never forwarded to the Approval queue.
-   - Tool execution is mathematically blocked.
+   - Tool execution is empirically verified to fail closed across tested scenarios.
    - An immutable audit log entry is written: `event_type="policy.violation_blocked"`.
    - Zero state mutation or discount leakage occurs.
 
 ---
 
-## 🛡️ Security Guarantees Demonstrated
+## 🛡️ Security Controls Empirically Verified
 - **No Direct Mutation:** Read-only agents cannot execute writes.
 - **Fail-Closed Governance:** Policy violations halt execution immediately.
-- **Strict Idempotency:** Duplicate execution requests are rejected.
-- **Zero Hallucinated Revenue:** Simulated and Estimated revenue are clearly separated from Observed cash.
+- **Strict Idempotency:** Duplicate execution requests are rejected via unique database constraints.
+- **Attribution Separation:** Simulated and Estimated revenue are clearly separated from Observed cash.
 - **Full Trace Provenance:** Every action links back to raw commerce telemetry.

@@ -45,3 +45,7 @@ In accordance with our core principle of **Zero Hallucination and Transparent En
   - Conversational copilot informs the merchant of provider unavailability.
   - Background decision workflows mark the run as `FAILED_TIMEOUT` without attempting unverified actions.
   - Zero state mutations occur during external AI provider degradation.
+
+### 7. Cloud Staging & Real-LLM Benchmarks Are Credential-Gated
+- **Constraint:** Live execution of empirical benchmarks against commercial frontier models (OpenAI, Gemini, Anthropic) and live remote deployment to cloud staging (Render, Vercel) require external merchant credentials and platform tokens.
+- **Enforcement:** In local or offline evaluation environments, the system executes the verified MockLLM regression suite (900 cases) and reports cloud/real benchmarks as **BLOCKED** rather than manufacturing unverified empirical results.

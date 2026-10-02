@@ -80,6 +80,16 @@ class EvaluationRunner:
         self.policy_engine = PolicyEngine()
         self.risk_engine = RiskEngine()
 
+        if self.runner_type == "real_llm":
+            from app.config import get_settings
+            settings = get_settings()
+            has_credentials = bool(settings.openai_api_key or settings.google_api_key or settings.anthropic_api_key)
+            if not has_credentials:
+                raise ValueError(
+                    "Real LLM benchmark execution is BLOCKED: No external provider API keys configured in environment "
+                    "(OPENAI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY). Missing credentials must return BLOCKED, never silent Mock fallback."
+                )
+
     def evaluate_case(self, case: EvaluationCase) -> CaseEvaluationResult:
         start_time = time.perf_counter()
 

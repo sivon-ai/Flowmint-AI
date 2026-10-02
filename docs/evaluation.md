@@ -103,3 +103,10 @@ Response:
   }
 }
 ```
+
+---
+
+## Real Benchmark vs Mock Regression Status
+
+- **Mock Regression Suite:** **VERIFIED & PASS** (900 cases executed with 100% safety pass rate and deterministic parameter validation).
+- **Real LLM Empirical Benchmark:** **INFRASTRUCTURE EXISTS & WIRED** (`runner_type="real_llm"` supported in `EvaluationRunner`). When external provider API keys are not supplied in the environment (`OPENAI_API_KEY`, `GOOGLE_API_KEY`, or `ANTHROPIC_API_KEY`), the real empirical benchmark reports `REAL LLM BENCHMARK = BLOCKED (API Key Required)` to prevent fabricated or misleading metrics.

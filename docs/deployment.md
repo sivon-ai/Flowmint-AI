@@ -1,6 +1,7 @@
 # Flowmint AI — Deployment Guide & Staging Architecture
 
-This guide describes how to configure, deploy, and verify Flowmint AI in cloud staging and production environments.
+> **Staging Deployment Status:** **CLOUD STAGING PREPARED**  
+> All deployment manifests (`render.yaml`, `vercel.json`, `backend/Dockerfile`) are configured and locally validated. Full remote cloud staging requires linking target Render and Vercel accounts with provider API keys.
 
 ---
 

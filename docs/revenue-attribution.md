@@ -12,15 +12,16 @@ $$\text{Opportunity} \to \text{ActionPlan} \to \text{Approval} \to \text{Executi
 
 To prevent inflated or manufactured ROI claims, Flowmint AI enforces an immutable metric taxonomy across all APIs and user interfaces:
 
-| Label | Meaning | When Used |
+| Label | Definition | Scope & Standard |
 |---|---|---|
-| `SIMULATED` | Theoretical projection computed using What-If counterfactual formulas. | In the Simulation Workbench before action formulation. |
-| `ESTIMATED` | Expected recovery or revenue generated during ActionPlan proposal. | On pending ActionPlans and human approval cards. |
-| `OBSERVED` | Real completed order transactions verified in the database. | After execution during observation window. |
-| `ATTRIBUTED` | Statistically adjusted impact using difference-in-differences or cohort matching. | In merchant ROI reports and ledger analytics. |
+| **`SIMULATED`** | Forward projection | Computed using What-If counterfactual formulas. Never claimed as realized revenue. |
+| **`ESTIMATED`** | Expected value before execution | Projected recovery or lift embedded in `PROPOSED` ActionPlans prior to approval. |
+| **`OBSERVED`** | Actual recorded transaction/payment | Real completed order transactions verified in the database post-execution. |
+| **`ATTRIBUTED`** | Calculated net impact | Net financial impact computed after subtracting discounts and operational costs. |
+| **`DETERMINISTIC EVENT LINK`** | Direct campaign/cart/coupon linkage | Explicit matching between action artifacts (vouchers, carts) and orders. **Does not imply generalized causal proof.** |
 
 > [!CAUTION]
-> Projected or simulated revenue must **NEVER** be reported as actual recovered revenue.
+> Projected or simulated revenue must **NEVER** be reported as actual recovered revenue. Deterministic event linkage identifies direct transactional matching but does not claim statistical causality against unobserved macro factors.
 
 ---
 

@@ -110,6 +110,11 @@ class TestPhase4EvaluationAndAttribution:
         benchmarks = await BenchmarkService.list_benchmarks(db_session, runner_type="mock_llm")
         assert len(benchmarks) >= 1
 
+        # Verify real_llm refuses to run without credentials and fails closed as BLOCKED
+        with pytest.raises(ValueError) as exc_info:
+            EvaluationRunner(runner_type="real_llm", model_name="gpt-4o")
+        assert "BLOCKED" in str(exc_info.value)
+
     # =========================================================================
     # 2. REVENUE ATTRIBUTION ENGINE & LABEL HIERARCHY
     # =========================================================================

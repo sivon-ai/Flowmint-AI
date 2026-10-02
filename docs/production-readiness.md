@@ -6,11 +6,11 @@ Flowmint AI is built as a production-grade, secure, bounded-autonomy revenue ope
 
 ---
 
-## Production Security & Resilience Guarantees
+## Production Security & Resilience Controls
 
 1. **Multi-Tenant Isolation**: Every database table enforces a composite `(merchant_id, ...)` foreign key or check constraint. All API routes enforce tenant-scoped filtering via `CurrentUser` dependencies. Cross-tenant reads and executions are rejected with 403 Forbidden.
 2. **Fail-Closed Architecture**: Any failure in policy evaluation, risk classification, or authorization fails closed. If an approval is expired or missing, execution is blocked.
-3. **Idempotent Mutations**: Database unique constraint on `(merchant_id, idempotency_key)` guarantees zero duplicate financial side effects. Replay attacks receive cached successful results without triggering secondary tool calls.
+3. **Idempotent Mutations**: Database unique constraint on `(merchant_id, idempotency_key)` prevents duplicate financial side effects across tested scenarios. Replay attacks receive cached successful results without triggering secondary tool calls.
 4. **No Secrets in Logs or Traces**: Credentials, Razorpay webhook secrets, database connection strings, and JWT keys are strictly excluded from AI prompts, agent messages, traces, and audit logs.
 5. **Prompt Injection Defense**: Untrusted user inputs are wrapped with XML boundary tags and validated by the security classifier before agent reasoning.
 
@@ -55,5 +55,5 @@ Example readiness response:
 - [x] JWT access token expiry set to 15 minutes, refresh token set to 7 days.
 - [x] Secure CORS origin whitelist configured via `CORS_ORIGINS`.
 - [x] Rate limiting middleware enabled.
-- [x] Full test suite (124 backend tests + frontend test suite) passing.
+- [x] Full test suite (126 backend tests + frontend test suite) passing.
 - [x] Production frontend build compiled without type errors.

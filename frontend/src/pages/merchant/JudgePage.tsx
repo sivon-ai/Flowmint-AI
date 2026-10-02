@@ -606,8 +606,8 @@ export default function JudgePage() {
               </div>
 
               <p className="text-xs text-surface-300">
-                Action execution is guaranteed idempotent. Replay attacks and duplicate runs are blocked
-                via database unique locks.
+                Action execution is enforced idempotent via distributed locks and database unique constraints.
+                Empirically verified to block replay attacks and duplicate executions across tested scenarios.
               </p>
 
               {!executedState ? (
@@ -670,7 +670,7 @@ export default function JudgePage() {
               <div className="p-4 bg-surface-950 border border-brand-500/40 rounded-xl bg-brand-950/20">
                 <div className="text-xs text-brand-300 font-semibold uppercase">Net Bankable Lift</div>
                 <div className="text-2xl font-black text-brand-400 mt-1">+₹8,865</div>
-                <div className="text-[11px] text-brand-300/80 mt-1">DETERMINISTIC EVENT LINK</div>
+                <div className="text-[11px] text-brand-300/80 mt-1">DETERMINISTIC EVENT LINK (Direct voucher match; non-causal)</div>
               </div>
             </div>
           </div>
