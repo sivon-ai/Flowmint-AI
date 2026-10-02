@@ -6,7 +6,7 @@ All secrets and environment-specific values are loaded from environment variable
 """
 
 from functools import lru_cache
-
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -71,6 +71,20 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        if self.app_env.lower() in ("production", "prod", "staging"):
+            insecure_defaults = {"change-me", "dev-secret-key", "secret", "default", "password", ""}
+            if self.secret_key.lower() in insecure_defaults or len(self.secret_key) < 16:
+                raise ValueError("In production/staging, SECRET_KEY must be a strong random secret (min 16 chars).")
+            if self.jwt_secret_key.lower() in insecure_defaults or len(self.jwt_secret_key) < 16:
+                raise ValueError("In production/staging, JWT_SECRET_KEY must be a strong random secret (min 16 chars).")
+            if "flowmint_dev" in self.database_url:
+                raise ValueError("In production/staging, DATABASE_URL must not contain default development credentials.")
+            if self.debug:
+                raise ValueError("In production/staging, DEBUG must be set to False.")
+        return self
 
 
 @lru_cache

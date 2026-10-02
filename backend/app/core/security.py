@@ -53,3 +53,24 @@ def decode_token(token: str) -> dict | None:
         return payload
     except JWTError:
         return None
+
+
+SENSITIVE_KEYS = {
+    "password", "secret", "token", "api_key", "authorization", "key_secret",
+    "webhook_secret", "jwt_secret_key", "secret_key", "credentials"
+}
+
+
+def redact_sensitive_data(val: any) -> any:
+    """Recursively scrub sensitive keys and tokens from data structures."""
+    if isinstance(val, dict):
+        sanitized = {}
+        for k, v in val.items():
+            if any(s in str(k).lower() for s in SENSITIVE_KEYS):
+                sanitized[k] = "***REDACTED***"
+            else:
+                sanitized[k] = redact_sensitive_data(v)
+        return sanitized
+    elif isinstance(val, list):
+        return [redact_sensitive_data(item) for item in val]
+    return val

@@ -16,6 +16,7 @@ import AuditPage from './pages/merchant/AuditPage';
 import AttributionPage from './pages/merchant/AttributionPage';
 import TraceViewerPage from './pages/merchant/TraceViewerPage';
 import EvaluationPage from './pages/merchant/EvaluationPage';
+import JudgePage from './pages/merchant/JudgePage';
 import StorefrontPage from './pages/buyer/StorefrontPage';
 import type { User } from './types';
 
@@ -62,11 +63,22 @@ export default function App() {
         user ? <Navigate to="/dashboard" /> : <LoginPage onLogin={handleLogin} />
       } />
       <Route path="/store" element={<StorefrontPage />} />
+      <Route path="/judge" element={
+        user ? (
+          <Navigate to="/dashboard/judge" />
+        ) : (
+          <div className="min-h-screen bg-surface-950 p-6 md:p-10 text-white">
+            <JudgePage />
+          </div>
+        )
+      } />
 
       {/* Protected merchant routes */}
       {user ? (
         <Route element={<DashboardLayout user={user} onLogout={handleLogout} />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/judge" element={<JudgePage />} />
+          <Route path="/dashboard/judge" element={<JudgePage />} />
           <Route path="/copilot" element={<AICopilotPage />} />
           <Route path="/opportunities" element={<OpportunitiesPage />} />
           <Route path="/simulations" element={<SimulationsPage />} />

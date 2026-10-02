@@ -16,6 +16,7 @@ import {
   DollarSign,
   GitBranch,
   FlaskConical,
+  Award,
 } from 'lucide-react';
 import type { User } from '../../types';
 
@@ -25,6 +26,7 @@ interface Props {
 }
 
 const navItems = [
+  { to: '/judge', icon: Award, label: 'Judge Walkthrough', badge: 'JUDGE' },
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/copilot', icon: Bot, label: 'AI Copilot', badge: 'AI' },
   { to: '/opportunities', icon: Lightbulb, label: 'Opportunities' },

@@ -76,6 +76,11 @@ export default function AttributionPage() {
     fetchData();
   }, []);
 
+  const formatMethod = (method: string) => {
+    if (method === 'deterministic_event') return 'DETERMINISTIC EVENT LINK';
+    return method.replace(/_/g, ' ').toUpperCase();
+  };
+
   const getLabelBadge = (label: string) => {
     switch (label) {
       case 'OBSERVED':
@@ -199,7 +204,7 @@ export default function AttributionPage() {
                 ₹{report.observed_net_revenue_impact.toLocaleString('en-IN')}
               </div>
               <div className="text-[11px] text-brand-300/80 mt-1">
-                Method: {report.attribution_method} ({(report.confidence * 100).toFixed(0)}% conf)
+                Method: {formatMethod(report.attribution_method)} ({(report.confidence * 100).toFixed(0)}% conf)
               </div>
             </div>
           </div>
@@ -260,8 +265,8 @@ export default function AttributionPage() {
                     <td className="py-4 px-6 font-bold text-emerald-400">
                       +₹{item.net_revenue_impact.toLocaleString('en-IN')}
                     </td>
-                    <td className="py-4 px-6 text-xs text-surface-400">
-                      {item.attribution_method}
+                    <td className="py-4 px-6 text-xs text-surface-300 font-medium">
+                      {formatMethod(item.attribution_method)}
                     </td>
                     <td className="py-4 px-6 text-right">
                       {item.trace_id ? (

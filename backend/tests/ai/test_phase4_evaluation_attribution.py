@@ -808,3 +808,37 @@ class TestPhase4EvaluationAndAttribution:
         audit_entry = audit_res.scalar_one_or_none()
         assert audit_entry is not None
         assert "exceeds merchant policy limit" in audit_entry.reason
+
+    async def test_production_configuration_audit_rejects_insecure_defaults(self):
+        """Verifies production configuration fails closed if initialized with development secrets."""
+        from app.config import Settings
+        with pytest.raises(ValueError) as exc:
+            Settings(
+                app_env="production",
+                secret_key="change-me",
+                jwt_secret_key="dev-secret-key-too-weak",
+                database_url="postgresql+asyncpg://flowmint:flowmint_dev@localhost:5432/flowmint_db",
+                debug=True,
+            )
+        assert "SECRET_KEY" in str(exc.value) or "DEBUG" in str(exc.value) or "database" in str(exc.value).lower()
+
+    async def test_sensitive_data_redaction_prevents_leakage(self):
+        """Verifies sensitive keys and tokens are redacted before logging or tracing."""
+        from app.core.security import redact_sensitive_data
+        sample = {
+            "user_id": "usr_123",
+            "password": "supersecretpassword",
+            "api_key": "sk-1234567890",
+            "access_token": "jwt.bearer.token",
+            "details": {
+                "jwt_secret_key": "mysecret",
+                "safe_field": "public_data",
+            },
+        }
+        scrubbed = redact_sensitive_data(sample)
+        assert scrubbed["password"] == "***REDACTED***"
+        assert scrubbed["api_key"] == "***REDACTED***"
+        assert scrubbed["access_token"] == "***REDACTED***"
+        assert scrubbed["details"]["jwt_secret_key"] == "***REDACTED***"
+        assert scrubbed["details"]["safe_field"] == "public_data"
+        assert scrubbed["user_id"] == "usr_123"
