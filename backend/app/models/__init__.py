@@ -31,5 +31,11 @@ from app.models.governance import (  # noqa: F401
     Offer,
     RiskLevel,
 )
+from app.models.attribution import (  # noqa: F401
+    ActionOutcome,
+    EvaluationBenchmark,
+    AttributionLabel,
+    AttributionMethod,
+)
 
 

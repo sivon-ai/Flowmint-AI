@@ -36,6 +36,7 @@ engine = create_async_engine(TEST_DB_URL, echo=False, poolclass=NullPool)
 TestSessionFactory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 TABLES_TO_TRUNCATE = [
+    "evaluation_benchmarks", "action_outcomes",
     "offers", "campaigns", "audit_logs", "action_executions", "approvals", "merchant_policies",
     "simulation_records", "action_plans", "opportunities",
     "tool_call_records", "agent_runs", "agent_messages", "agent_sessions",

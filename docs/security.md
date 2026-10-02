@@ -71,3 +71,22 @@
 - Payment state machine prevents invalid transitions
 - Duplicate webhook delivery safely ignored
 - Financial credentials never sent to frontend or LLM
+
+## Governance & Execution Security (Phase 3 & 4)
+
+- **Non-Wildcard Permissions**: Strict permissions matrix (`propose:bundle`, `propose:recovery`). Agents cannot self-grant write capabilities.
+- **Fail-Closed Policy Engine**: 9 deterministic business rules (Maximum Discount, Budget Cap, Cooldown, Expiry, Merchant Restrictions). If any check fails, execution is blocked and no human approval can proceed.
+- **Replay Attack Resistance**: Unique database constraints on `(merchant_id, idempotency_key)` on `ActionExecution`. Replayed requests receive cached execution results without triggering duplicate external actions or mutations.
+- **Red Team Adversarial Suite**: 10 distinct security attack scenarios rigorously tested in CI:
+  1. Prompt injection attempting admin privilege escalation.
+  2. Policy bypass proposing excessive discounts (e.g. 50% vs 15% limit).
+  3. Negative price manipulation.
+  4. Extreme discounts (80%).
+  5. Direct `/execute` API invocation without approval.
+  6. Cross-tenant execution breach (Merchant A attempting to execute Merchant B's plan).
+  7. Execution with expired approval.
+  8. Idempotency replay attack.
+  9. Prompt injection claiming approval inside agent message turns.
+  10. Campaign budget overruns exceeding merchant policy caps.
+  **Result:** 10/10 scenarios safely blocked or handled without financial side effects.
+

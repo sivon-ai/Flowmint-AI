@@ -123,7 +123,8 @@ class ActionExecutionService:
             )
             return {
                 "allowed": False,
-                "requires_approval": evaluation.requires_approval,
+                "requires_approval": False,
+                "approval_id": None,
                 "risk_level": evaluation.risk_level,
                 "reasons": evaluation.reasons,
                 "rule_results": [
@@ -174,6 +175,8 @@ class ActionExecutionService:
                 for r in evaluation.rule_results
             ],
         }
+
+    validate_action_plan = validate_action
 
     @staticmethod
     async def execute_action(
@@ -412,6 +415,18 @@ class ActionExecutionService:
                 trace_id=tool_ctx.trace_id,
             )
             await db.flush()
+
+            # Phase 4: Automatically link executed action to Attribution Engine
+            try:
+                from app.services.attribution_service import AttributionService
+                await AttributionService.record_outcome_for_execution(
+                    db=db,
+                    merchant_id=merchant_id,
+                    action_plan_id=action_plan.id,
+                    execution_id=execution.id,
+                )
+            except Exception as attr_err:
+                logger.warning(f"Attribution recording warning: {attr_err}")
 
             return {
                 "status": "completed",

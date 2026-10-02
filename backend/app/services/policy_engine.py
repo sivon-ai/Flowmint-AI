@@ -68,6 +68,15 @@ class MaximumDiscountRule(BasePolicyRule):
         discount = Decimal(str(p.get("discount_percentage", 0)))
         max_allowed = context.policy.max_discount_percentage if context.policy else Decimal("15.00")
 
+        if discount < 0:
+            return PolicyRuleResult(
+                rule=self.name,
+                passed=False,
+                severity=self.severity,
+                reason="Negative discount percentage is invalid.",
+                evidence={"proposed_discount": float(discount)},
+            )
+
         if discount > max_allowed:
             return PolicyRuleResult(
                 rule=self.name,
@@ -155,7 +164,11 @@ class ContactFrequencyRule(BasePolicyRule):
     severity = "BLOCK"
 
     async def evaluate(self, action_plan: ActionPlan, context: PolicyContext) -> PolicyRuleResult:
-        cooldown_hours = context.policy.contact_cooldown_hours if context.policy else 24
+        cooldown_hours = (
+            context.policy.contact_cooldown_hours
+            if context.policy and context.policy.contact_cooldown_hours is not None
+            else 24
+        )
         cutoff = context.now - timedelta(hours=cooldown_hours)
 
         # Query recent executions on the same target
@@ -221,7 +234,11 @@ class HighValueActionRule(BasePolicyRule):
     severity = "WARN"
 
     async def evaluate(self, action_plan: ActionPlan, context: PolicyContext) -> PolicyRuleResult:
-        high_threshold = context.policy.high_value_threshold if context.policy else Decimal("10000.00")
+        high_threshold = (
+            context.policy.high_value_threshold
+            if context.policy and context.policy.high_value_threshold is not None
+            else Decimal("10000.00")
+        )
         p = action_plan.parameters or {}
         budget = Decimal(str(p.get("budget", 0)))
         est_impact = Decimal(str(action_plan.estimated_impact.get("projected_revenue", 0) if action_plan.estimated_impact else 0))

@@ -165,3 +165,32 @@ Query params: `q`, `category_id`, `min_price`, `max_price`, `status`, `sort_by`,
 | GET | `/audit` | JWT | List immutable audit log records for merchant |
 | GET | `/audit/:id` | JWT | Get specific audit log entry with execution & policy payload |
 
+## Phase 4 Endpoints (Active)
+
+### Revenue Attribution
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/attribution/outcomes` | JWT | List attributed action outcomes with strict label hierarchy |
+| GET | `/attribution/outcomes/:action_id` | JWT | Get outcome for specific action plan |
+| GET | `/attribution/before-vs-after` | JWT | Merchant Before vs After campaign comparison report |
+| POST | `/attribution/measure` | JWT | Explicitly compute post-execution observed financial impact |
+
+### End-to-End Tracing
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/traces` | JWT | List recent commercial causal traces for merchant |
+| GET | `/traces/:trace_id` | JWT | Reconstruct complete chronological DAG timeline for trace |
+
+### AI Evaluation Lab
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/evaluation/dataset` | JWT | Breakdown of 900 multi-domain evaluation cases |
+| GET | `/evaluation/benchmarks` | JWT | List historical benchmark evaluation runs |
+| POST | `/evaluation/run` | JWT | Execute benchmark suite against MockLLM or Real LLM |
+
+### Performance Telemetry
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/performance/metrics` | JWT | Get latency, cache hit rate, token usage, and model cost |
+
+

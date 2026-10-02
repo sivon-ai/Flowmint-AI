@@ -13,6 +13,9 @@ import {
   ShieldCheck,
   CheckSquare,
   FileText,
+  DollarSign,
+  GitBranch,
+  FlaskConical,
 } from 'lucide-react';
 import type { User } from '../../types';
 
@@ -28,6 +31,9 @@ const navItems = [
   { to: '/simulations', icon: TrendingUp, label: 'Simulations' },
   { to: '/approvals', icon: CheckSquare, label: 'Approvals', badge: 'HITL' },
   { to: '/policies', icon: ShieldCheck, label: 'Policy Engine' },
+  { to: '/attribution', icon: DollarSign, label: 'Attribution', badge: 'ROI' },
+  { to: '/traces', icon: GitBranch, label: 'Trace Viewer' },
+  { to: '/evaluation', icon: FlaskConical, label: 'AI Evaluation', badge: '900' },
   { to: '/audit', icon: FileText, label: 'Audit Trail' },
   { to: '/products', icon: Package, label: 'Products' },
   { to: '/inventory', icon: Warehouse, label: 'Inventory' },
@@ -55,7 +61,7 @@ export default function DashboardLayout({ user, onLogout }: Props) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map(item => (
             <NavLink
               key={item.to}
@@ -73,19 +79,6 @@ export default function DashboardLayout({ user, onLogout }: Props) {
               )}
             </NavLink>
           ))}
-
-          {/* Phase 4 items preview */}
-          <div className="pt-4 mt-4 border-t border-surface-700/50">
-            <div className="px-3 py-1 text-[10px] font-semibold text-surface-300/40 uppercase tracking-widest">
-              Coming in Phase 4
-            </div>
-            {['Autonomous Closed-Loop', 'Revenue Attribution', 'Agent Evaluation Suite'].map(label => (
-              <div key={label} className="nav-link opacity-30 cursor-not-allowed">
-                <ChevronRight className="w-4 h-4" />
-                <span>{label}</span>
-              </div>
-            ))}
-          </div>
         </nav>
 
         {/* User */}

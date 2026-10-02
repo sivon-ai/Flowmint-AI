@@ -27,39 +27,23 @@
 | Analytics Agent | Revenue calculation, AOV, order status summary, product sales ranking |
 | Agent Orchestrator | Deterministic intent routing across 40 fixture queries, clarification requests, session/run lifecycle persistence |
 | Prompt Injection | Adversarial jailbreak detection, tenant isolation in tools, untrusted data wrapping |
-| Agent API | Endpoints `/chat`, `/buyer`, `/analytics`, `/sessions`, `/runs`, cross-tenant session access denial |
+| Governance & Execution | Policy rules, risk classification, approval expiration, idempotency locks, audit log immutability |
+| Evaluation & Attribution | 900-case dataset structure, MockLLM vs Real LLM runner, revenue attribution ledger, before-vs-after reporting, DAG trace reconstruction, 5 fail-closed recovery scenarios, 10 red-team adversarial scenarios, performance metrics, canonical 5-minute success demo, mandatory policy blocked demo |
 
-### Fixture Dataset (`tests/ai/fixtures.py`)
-- **20 Buyer Queries**: Testing product retrieval, budget constraints, feature filtering, and catalog queries.
-- **10 Analytics Queries**: Testing revenue aggregations, conversion metrics, product rankings, and period comparisons.
-- **10 Adversarial Queries**: Testing prompt injection resistance, role overrides, system instruction extraction, and tool bypass attempts.
+### Phase 4 Evaluation Dataset Breakdown
+- **500 Buyer Queries**: Faceted search, filtering, inventory, cart mutations.
+- **100 Analytics Queries**: Revenue aggregations, conversion metrics, payment failures, comparisons.
+- **100 Growth Scenarios**: Bundle recommendations, cross-sell offers.
+- **50 Recovery Scenarios**: Abandoned cart recoveries, payment retry nudges.
+- **50 Adversarial Bypass Scenarios**: Discounts > 15%, budget overruns, negative prices.
+- **50 Prompt Injection Scenarios**: Jailbreaks, system instruction extraction, fake approval claims.
+- **50 Failure Scenarios**: Malformed parameters, empty states, missing targets.
 
-### Running Tests
-```bash
-cd backend
-.venv\Scripts\activate
-pytest tests/ -v
-```
-
-## Frontend Testing
-
-### Framework
-- **Vitest** for unit/component tests
-- **React Testing Library** for component testing
-- **Playwright** for E2E (Phase 4)
-
-### Running Tests
-```bash
-cd frontend
-npm test
-```
-
-## Test Data
-
-- Test fixtures in `tests/conftest.py` create fresh data per test
-- Tables are created/dropped for each test (isolation)
-- Two merchant fixtures (`merchant`, `merchant_b`) for tenant isolation tests
-- Seed data script (`python -m app.seed`) for demo/development
+### Verified Status: 124/124 Tests Passing
+- 124 backend tests passing with pytest.
+- Vitest frontend tests passing.
+- TypeScript `tsc --noEmit` passing with 0 errors.
+- Production bundle compiled cleanly.
 
 ## CI Integration (Future)
 

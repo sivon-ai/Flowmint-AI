@@ -122,3 +122,51 @@ All merchant data is strictly isolated via `merchant_id` foreign keys and compos
 - `agent_runs`: Audit trace recording latency, token usage, agent name, model, and status.
 - `tool_call_records`: Detailed record of every tool executed with input parameters, output payload, and latency.
 
+---
+
+## 4. Safety, Governance & Execution Pipeline (Phase 3)
+
+```
+[Agent] -> [ActionPlan (PROPOSED)] -> [Policy Check (9 Rules)] -> [Risk Engine (4 Tiers)]
+                                                                           |
+                                                                           v
+[Immutable AuditLog] <- [Outcome] <- [Execution] <- [Approved?] <- [HITL Approval Required?]
+```
+
+- **Policy Engine**: 9 deterministic business rules evaluating discounts, budgets, targets, frequencies, and expiry.
+- **Risk Engine**: 4-tier classification (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
+- **HITL Approval**: Expiring approval requests with multi-tenant isolation.
+- **ActionExecutionService**: Centralized idempotent executor with database unique constraints on `(merchant_id, idempotency_key)` preventing replay attacks.
+- **AuditLog**: Tamper-evident, immutable audit trail.
+
+---
+
+## 5. Evaluation, Attribution & Observability Subsystem (Phase 4)
+
+```
++------------------------------------------------------------------------+
+|                          OBSERVABILITY & TRACING                       |
+|  - Causal DAG Reconstruction: Opportunity -> Agent -> Tool -> Plan ->  |
+|    Policy -> Approval -> Execution -> Outcome -> AuditLog              |
+|  - Persistent trace_id linkage across all entities                     |
+|  - SafeReadCache with Redis & sub-millisecond query acceleration       |
++------------------------------------------------------------------------+
+                                    |
+          +-------------------------+-------------------------+
+          |                                                   |
+          v                                                   v
++-------------------------------+   +------------------------------------+
+|       AI EVALUATION LAB       |   |    REVENUE ATTRIBUTION ENGINE      |
+| - 900 Multi-domain test cases |   | - Strict Label Taxonomy:           |
+| - Intent accuracy (100%)      |   |   SIMULATED, ESTIMATED, OBSERVED,  |
+| - Injection defense (100%)    |   |   ATTRIBUTED                       |
+| - Grounding & zero-hallucinate|   | - Deterministic Net Revenue Impact |
+| - Strict Mock vs Real LLM sep |   |   (Gross - Discounts - Ops Cost)   |
++-------------------------------+   +------------------------------------+
+```
+
+### Persistence Models (Phase 4)
+- `action_outcomes`: Multi-tier ledger tracking gross revenue, discounts, net impact, confidence, and attribution methods.
+- `evaluation_benchmarks`: Historical benchmark records tracking accuracy, latency, token budgets, and safety rates.
+
+

@@ -1,0 +1,87 @@
+"""
+Flowmint AI — Revenue Attribution API Endpoints (Phase 4).
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import CurrentUser, get_current_user
+from app.database import get_db
+from app.schemas.attribution import (
+    ActionOutcomeResponse,
+    AttributionMeasureRequest,
+    BeforeVsAfterReportResponse,
+)
+from app.schemas.common import ApiResponse
+from app.services.attribution_service import AttributionService
+
+router = APIRouter(prefix="/attribution", tags=["Attribution"])
+
+
+@router.get("", response_model=ApiResponse[list[ActionOutcomeResponse]])
+async def list_outcomes(
+    limit: int = Query(default=50, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    outcomes = await AttributionService.get_outcomes_for_merchant(
+        db, current_user.merchant_id, limit=limit
+    )
+    return ApiResponse.ok([ActionOutcomeResponse.model_validate(o) for o in outcomes])
+
+
+@router.get("/{action_id}", response_model=ApiResponse[ActionOutcomeResponse | None])
+async def get_outcome(
+    action_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    outcome = await AttributionService.get_outcome_by_action_id(
+        db, current_user.merchant_id, action_id
+    )
+    if not outcome:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Outcome for action {action_id} not found",
+        )
+    return ApiResponse.ok(ActionOutcomeResponse.model_validate(outcome))
+
+
+@router.get("/{action_id}/report", response_model=ApiResponse[BeforeVsAfterReportResponse])
+async def get_before_vs_after_report(
+    action_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        report = await AttributionService.get_before_vs_after_report(
+            db, current_user.merchant_id, action_id
+        )
+        return ApiResponse.ok(BeforeVsAfterReportResponse.model_validate(report))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/measure", response_model=ApiResponse[ActionOutcomeResponse])
+async def measure_outcome(
+    req: AttributionMeasureRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        outcome = await AttributionService.record_outcome_for_execution(
+            db=db,
+            merchant_id=current_user.merchant_id,
+            action_plan_id=req.action_id,
+            attribution_method=req.attribution_method,
+            label=req.label,
+            custom_metrics=req.custom_metrics,
+        )
+        return ApiResponse.ok(ActionOutcomeResponse.model_validate(outcome))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

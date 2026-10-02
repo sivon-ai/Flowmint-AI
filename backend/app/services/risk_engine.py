@@ -40,8 +40,16 @@ class RiskEngine:
         est_val = Decimal(str(action_plan.estimated_impact.get("projected_revenue", 0) if action_plan.estimated_impact else 0))
 
         # Check against merchant policy threshold if available
-        high_val_threshold = policy.high_value_threshold if policy else Decimal("10000.00")
-        max_discount_limit = policy.max_discount_percentage if policy else Decimal("15.00")
+        high_val_threshold = (
+            policy.high_value_threshold
+            if policy and policy.high_value_threshold is not None
+            else Decimal("10000.00")
+        )
+        max_discount_limit = (
+            policy.max_discount_percentage
+            if policy and policy.max_discount_percentage is not None
+            else Decimal("15.00")
+        )
 
         # Audience scope
         affected_count = len(p.get("cart_ids", [])) or len(p.get("customer_ids", [])) or int(p.get("eligible_count", 0))

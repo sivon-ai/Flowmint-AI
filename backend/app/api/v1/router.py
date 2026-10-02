@@ -18,6 +18,10 @@ from app.api.v1.payments import router as payments_router
 from app.api.v1.policies import router as policies_router
 from app.api.v1.products import router as products_router
 from app.api.v1.simulations import router as simulations_router
+from app.api.v1.attribution import router as attribution_router
+from app.api.v1.evaluation import router as evaluation_router
+from app.api.v1.traces import router as traces_router
+from app.api.v1.performance import router as performance_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -37,5 +41,10 @@ api_router.include_router(policies_router)
 api_router.include_router(actions_router)
 api_router.include_router(approvals_router)
 api_router.include_router(audit_router)
+api_router.include_router(attribution_router)
+api_router.include_router(evaluation_router)
+api_router.include_router(traces_router)
+api_router.include_router(performance_router)
+
 
 

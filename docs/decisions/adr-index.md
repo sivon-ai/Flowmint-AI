@@ -204,3 +204,41 @@
 
 **Rationale:** Protects the merchant against financial runaway, unauthorized discounts, cross-tenant leaks, and replay attacks. Establishes an immutable, tamper-evident audit record of every business transition.
 
+---
+
+## ADR-017: Deterministic Revenue Attribution Engine & Strict Label Hierarchy
+
+**Status:** Accepted  
+**Date:** 2026-10-02
+
+**Decision:** Create a deterministic, ground-truth revenue attribution engine and strict metric label taxonomy:
+1. `SIMULATED`: Theoretical counterfactual computed by What-If simulation formulas.
+2. `ESTIMATED`: Pre-execution expectation generated when formulating an ActionPlan.
+3. `OBSERVED`: Empirical, post-execution transaction telemetry (orders completed, gross recovery, discount deductions).
+4. `ATTRIBUTED`: Multi-factor difference-in-differences impact matching baseline and observation cohorts.
+
+Projected revenue must NEVER be presented as actual bankable or recovered revenue. Net revenue impact is strictly computed as:
+$$\text{Observed Net Revenue Impact} = \text{Observed Gross Revenue} - \text{Discount Cost} - \text{Operational Cost}$$
+
+**Rationale:** AI commerce systems frequently manufacture or conflate hypothetical estimates with actual bankable receipts. Explicit label separation and deterministic SQL verification prevent fake ROI reporting and maintain absolute merchant accounting integrity.
+
+---
+
+## ADR-018: End-to-End Causal Trace DAG & Fail-Closed Failure Recovery
+
+**Status:** Accepted  
+**Date:** 2026-10-02
+
+**Decision:** 
+1. Reconstruct every consequential revenue decision as a complete, chronological causal DAG timeline:
+   $$\text{Opportunity} \to \text{Agent Run} \to \text{Tool Calls} \to \text{ActionPlan} \to \text{Policy Check} \to \text{Risk Classification} \to \text{HITL Approval} \to \text{Execution} \to \text{Outcome} \to \text{Audit Log}$$
+   linked by a unified `trace_id` indexed across all database entities.
+2. Implement fail-closed failure recovery:
+   - On LLM timeout/unavailable: fail closed, mark run failed, trigger no side effects.
+   - On Tool failure/timeout: rollback transaction, mark execution failed, alert merchant.
+   - On Expired approval: invalidate decision, require fresh merchant re-validation.
+   - On Duplicate webhook / execution replay: reject mutation and return cached idempotent result.
+   - Unknown states must NEVER assume success.
+
+**Rationale:** High-stakes commerce cannot tolerate ambiguous intermediate states, orphaned database mutations, or unobservable failure modes. A persistent trace DAG provides instant explainability for merchants, auditors, and operators.
+

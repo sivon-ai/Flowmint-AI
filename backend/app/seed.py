@@ -195,10 +195,106 @@ async def seed():
             db.add(c)
             created_customers.append(c)
 
+        # --- Merchant Policy (Phase 3 & 4) ---
+        from app.models.governance import MerchantPolicy
+        from app.models.opportunity import Opportunity, OpportunityStatus, OpportunityType
+
+        policy = MerchantPolicy(
+            merchant_id=merchant.id,
+            max_discount_percentage=Decimal("15.00"),
+            max_campaign_budget=Decimal("50000.00"),
+            high_value_threshold=Decimal("10000.00"),
+            contact_cooldown_hours=24,
+            require_approval_all_actions=True,
+            auto_approval_max_risk="low",
+            allowed_action_types=[
+                "abandoned_cart_recovery",
+                "cross_sell_bundle",
+                "promotional_offer",
+                "payment_retry_nudge",
+            ],
+            is_active=True,
+        )
+        db.add(policy)
+
+        # --- 37 Abandoned Carts (Total: ₹1,42,000) ---
+        cart_values = [3500, 4200, 2800, 5100, 1900, 6200, 3100, 4800, 3900, 2400]
+        abandoned_cart_ids = []
+        target_p = created_products[0]  # First product
+        for i in range(37):
+            c = Cart(
+                merchant_id=merchant.id,
+                customer_id=created_customers[i % len(created_customers)].id,
+                status="abandoned",
+                created_at=datetime.now(timezone.utc),
+            )
+            db.add(c)
+            await db.flush()
+            abandoned_cart_ids.append(str(c.id))
+
+            val = cart_values[i % len(cart_values)]
+            item = CartItem(
+                cart_id=c.id,
+                product_id=target_p.id,
+                quantity=1,
+                unit_price=Decimal(str(val)),
+            )
+            db.add(item)
+
+        # --- Canonical Opportunity 1: ₹1,42,000 At-Risk Cart Abandonment ---
+        opp_abandoned = Opportunity(
+            merchant_id=merchant.id,
+            type=OpportunityType.ABANDONED_CART.value,
+            title="High Checkout Abandonment (₹1,42,000 at risk)",
+            description="37 high-intent buyer carts were abandoned during checkout in the last 24 hours.",
+            status=OpportunityStatus.DETECTED.value,
+            priority="high",
+            estimated_value=Decimal("142000.00"),
+            confidence=Decimal("0.92"),
+            evidence_json={
+                "metric": "cart_abandonment_spike",
+                "eligible_carts": 37,
+                "at_risk_amount": 142000.0,
+                "time_window": "last_24h",
+                "cart_ids": abandoned_cart_ids[:10],
+                "rationale": "Abandonment rate increased by 18% over the 7-day rolling baseline.",
+            },
+            recommended_action="abandoned_cart_recovery",
+            affected_entity_type="cart",
+            affected_entity_ids=abandoned_cart_ids[:5],
+        )
+        db.add(opp_abandoned)
+
+        # --- Canonical Opportunity 2: Cross-sell Opportunity ---
+        opp_cross_sell = Opportunity(
+            merchant_id=merchant.id,
+            type=OpportunityType.CROSS_SELL.value,
+            title="Cross-Sell Bundle: MacBook Air + USB-C Hub Affinity",
+            description="Buyers of laptops have an 34% affinity for multi-port USB-C hubs when bundled with a 10% discount.",
+            status=OpportunityStatus.DETECTED.value,
+            priority="medium",
+            estimated_value=Decimal("34500.00"),
+            confidence=Decimal("0.85"),
+            evidence_json={
+                "metric": "high_co_purchase_affinity",
+                "primary_product": "MacBook Air M2",
+                "companion_product": "Anker 7-in-1 USB-C Hub",
+                "co_occurrence_count": 28,
+                "estimated_monthly_lift": 34500.0,
+            },
+            recommended_action="cross_sell_bundle",
+            affected_entity_type="product",
+            affected_entity_ids=[str(created_products[0].id)],
+        )
+        db.add(opp_cross_sell)
+
         await db.commit()
         print(f"✓ Seeded merchant: {merchant.name}")
         print(f"✓ Seeded {len(created_products)} products across 4 categories")
         print(f"✓ Seeded {len(created_customers)} customers")
+        print(f"✓ Seeded 37 abandoned carts totaling ₹1,42,000")
+        print(f"✓ Seeded 2 canonical revenue opportunities with inspectable evidence")
+        print(f"✓ Seeded MerchantPolicy (max 15% discount, 50k budget)")
         print(f"\n  Login: admin@techmart.in / admin123")
 
 

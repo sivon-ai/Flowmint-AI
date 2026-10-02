@@ -13,6 +13,9 @@ import SimulationsPage from './pages/merchant/SimulationsPage';
 import ApprovalsPage from './pages/merchant/ApprovalsPage';
 import PoliciesPage from './pages/merchant/PoliciesPage';
 import AuditPage from './pages/merchant/AuditPage';
+import AttributionPage from './pages/merchant/AttributionPage';
+import TraceViewerPage from './pages/merchant/TraceViewerPage';
+import EvaluationPage from './pages/merchant/EvaluationPage';
 import StorefrontPage from './pages/buyer/StorefrontPage';
 import type { User } from './types';
 
@@ -69,6 +72,9 @@ export default function App() {
           <Route path="/simulations" element={<SimulationsPage />} />
           <Route path="/approvals" element={<ApprovalsPage />} />
           <Route path="/policies" element={<PoliciesPage />} />
+          <Route path="/attribution" element={<AttributionPage />} />
+          <Route path="/traces" element={<TraceViewerPage />} />
+          <Route path="/evaluation" element={<EvaluationPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
