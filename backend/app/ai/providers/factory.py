@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from app.ai.providers.anthropic_provider import AnthropicProvider
 from app.ai.providers.base import LLMProvider
+from app.ai.providers.fireworks_provider import FireworksProvider
 from app.ai.providers.google_provider import GoogleProvider
 from app.ai.providers.mock import MockLLMProvider
 from app.ai.providers.openai_provider import OpenAIProvider
@@ -19,7 +20,16 @@ def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
     cfg = settings or get_settings()
     provider_name = cfg.ai_provider.lower().strip()
 
-    if provider_name == "openai":
+    if provider_name == "fireworks":
+        model = cfg.fireworks_model
+        if cfg.ai_model and cfg.ai_model != "mock-model":
+            model = cfg.ai_model
+        return FireworksProvider(
+            api_key=cfg.fireworks_api_key,
+            model=model,
+            base_url=cfg.fireworks_base_url,
+        )
+    elif provider_name == "openai":
         return OpenAIProvider(
             api_key=cfg.openai_api_key,
             model=cfg.ai_model if cfg.ai_model != "mock-model" else "gpt-4o",

@@ -52,13 +52,16 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # --- AI Settings (Phase 2A) ---
-    ai_provider: str = "mock"  # mock, openai, anthropic, google
+    ai_provider: str = "mock"  # mock, fireworks, openai, anthropic, google
     ai_model: str = "mock-model"
     ai_temperature: float = 0.1
     ai_max_tokens: int = 1024
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     google_api_key: str = ""
+    fireworks_api_key: str = ""
+    fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"
+    fireworks_model: str = "accounts/fireworks/models/qwen3p8-max"
 
     # --- Embedding Settings (Phase 2A) ---
     embedding_provider: str = "mock"  # mock, openai

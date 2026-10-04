@@ -9,10 +9,12 @@ from app.ai.providers.base import (
     UsageMetadata,
 )
 from app.ai.providers.factory import get_llm_provider
+from app.ai.providers.fireworks_provider import FireworksProvider
 from app.ai.providers.mock import MockLLMProvider
 
 __all__ = [
     "FunctionCallData",
+    "FireworksProvider",
     "LLMMessage",
     "LLMProvider",
     "LLMResponse",

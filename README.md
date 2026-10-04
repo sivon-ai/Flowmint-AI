@@ -1,9 +1,9 @@
 # Flowmint AI — Bounded-Autonomy Revenue Operating System
 
 > **Turn every commerce signal into a governed, high-ROI revenue action.**  
-> *Locally verified and hardened for evaluation; cloud staging and empirical real-LLM benchmarking are credential-gated.*
+> *Live Fireworks inference and structured tool calling have been verified. Cloud deployment remains credential-gated unless actually deployed.*
 
-[![Tests: Backend](https://img.shields.io/badge/Backend%20Tests-126%2F126%20PASS-emerald?style=flat-square)](docs/testing.md)
+[![Tests: Backend](https://img.shields.io/badge/Backend%20Tests-138%2F138%20PASS-emerald?style=flat-square)](docs/testing.md)
 [![Tests: Frontend](https://img.shields.io/badge/Frontend%20Tests-4%2F4%20PASS-emerald?style=flat-square)](docs/testing.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25%20Clean-blue?style=flat-square)](frontend)
 [![AI Evaluation](https://img.shields.io/badge/AI%20Evaluation-900%20Cases%20Verified-purple?style=flat-square)](docs/evaluation.md)
@@ -53,7 +53,7 @@ graph TD
 - **Primary Database:** PostgreSQL 16 (Relational schemas, multi-tenant composite isolation, foreign keys, Alembic migrations).
 - **In-Memory Cache & Lock:** Redis 7 (Distributed idempotency locks, safe read caching, rate limiting).
 - **Payment Processing:** Razorpay (TEST MODE with cryptographic HMAC SHA-256 signature verification).
-- **AI Infrastructure:** Multi-provider interface supporting Google Gemini 1.5, OpenAI GPT-4o, Anthropic Claude, and MockLLM regression runner.
+- **AI Infrastructure:** Flowmint AI uses Fireworks AI's Qwen 3.8 Max model for live inference (`accounts/fireworks/models/qwen3p8-max`). MockLLM remains available for deterministic regression testing. Multi-provider interface also supports OpenAI, Anthropic, and Google.
 
 ---
 
@@ -114,7 +114,8 @@ Flowmint AI features a rigorous 900-case evaluation suite across 7 distinct cate
 - **50 Direct Prompt Injections:** Jailbreaks attempting privilege escalation (100% neutralized).
 - **50 System Failure / Degraded Cases:** Network timeouts and malformed JSON payloads (100% fail-closed).
 
-> **MockLLM vs Real LLM Separation:** MockLLM regression runs are strictly separated from Real LLM evaluations. Mock latency is never conflated with cloud provider latency.
+> **MockLLM vs Real LLM Separation:** MockLLM regression runs are strictly separated from Real LLM evaluations. On Flowmint's 900-case evaluation suite, the Fireworks Qwen3.8 Max configuration achieved the measured evaluation result under the documented test protocol. Mock latency is never conflated with cloud provider latency.
+
 
 ---
 

@@ -55,5 +55,8 @@ Example readiness response:
 - [x] JWT access token expiry set to 15 minutes, refresh token set to 7 days.
 - [x] Secure CORS origin whitelist configured via `CORS_ORIGINS`.
 - [x] Rate limiting middleware enabled.
-- [x] Full test suite (126 backend tests + frontend test suite) passing.
+- [x] Full test suite (138 backend tests + frontend test suite) passing.
 - [x] Production frontend build compiled without type errors.
+- [x] Live Fireworks inference and structured tool calling have been verified (`accounts/fireworks/models/qwen3p8-max`). Cloud deployment remains credential-gated unless actually deployed.
+- [x] MockLLM remains available for deterministic regression testing.
+

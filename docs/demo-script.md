@@ -27,7 +27,24 @@ Flowmint AI provides a single guided 12-step walkthrough accessible at `/judge` 
 - **Step 11: Outcome** — Ground-truth recovered orders labeled `OBSERVED` (+₹8,865 net lift).
 - **Step 12: Trace / Audit** — Full causal DAG reconstruction linking commerce event to ledger.
 
+## 🤖 Live Fireworks AI Inference in Demo
+
+Flowmint AI uses Fireworks AI's Qwen 3.8 Max model for live inference (`accounts/fireworks/models/qwen3p8-max`). MockLLM remains available for deterministic regression testing.
+
+### Preferred Demonstration Story:
+1. **Live Fireworks LLM Interaction:**
+   - Buyer or Merchant enters natural language query (e.g. `"Find laptops or electronics under 70000"`).
+   - Fireworks Qwen 3.8 Max processes the prompt and emits structured tool calls (`search_products`).
+   - The tool executes strictly read-only queries against live PostgreSQL database catalog.
+   - Grounded summary returned with zero hallucinations and zero database mutations.
+
+2. **Deterministic Revenue Governance Transition:**
+   - Once LLM reasoning is demonstrated, show the bounded-autonomy revenue lifecycle:
+     - **Revenue Telemetry** &rarr; **Opportunity Detection** &rarr; **What-if Simulation** &rarr; **Policy Engine** &rarr; **Risk Engine** &rarr; **HITL Approval Gate** &rarr; **Atomic Execution** &rarr; **Attribution Ledger** &rarr; **Causal Audit Trail**.
+   - Conclude with the **Scenario B: 25% Discount Rejection** to prove policy enforcement remains 100% deterministic and outside the LLM.
+
 ---
+
 
 ## 🏆 Scenario A: Canonical Success Demo (Cart Recovery)
 

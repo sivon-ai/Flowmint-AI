@@ -5,16 +5,24 @@ Uses an in-memory or test database with real async sessions.
 """
 
 import asyncio
+import os
+from pathlib import Path
 import uuid
 from collections.abc import AsyncGenerator
 from decimal import Decimal
 
+from dotenv import load_dotenv
 import pytest
 import pytest_asyncio
 import sqlalchemy as sa
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
+
+# Load backend/.env so pytest environment has FIREWORKS_API_KEY and other configured env vars
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+if _env_path.exists():
+    load_dotenv(dotenv_path=_env_path, override=False)
 
 from app.config import get_settings
 from app.core.security import create_access_token, hash_password
@@ -45,6 +53,16 @@ TABLES_TO_TRUNCATE = [
     "products", "categories", "users", "merchants"
 ]
 
+
+
+@pytest.fixture(autouse=True)
+def isolate_mock_regression(monkeypatch):
+    """
+    Isolates standard regression tests to the deterministic MockLLM provider.
+    Dedicated provider tests in test_fireworks_provider.py explicitly configure FireworksProvider.
+    """
+    s = get_settings()
+    monkeypatch.setattr(s, "ai_provider", "mock")
 
 
 @pytest_asyncio.fixture

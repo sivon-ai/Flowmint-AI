@@ -82,21 +82,27 @@ class EvaluationRunner:
 
         if self.runner_type == "real_llm":
             from app.config import get_settings
+            from app.ai.providers.factory import get_llm_provider
             settings = get_settings()
-            if "gpt" in self.model_name.lower():
+            if "fireworks" in self.model_name.lower() or "qwen" in self.model_name.lower() or settings.ai_provider.lower() == "fireworks":
+                has_credentials = bool(settings.fireworks_api_key)
+            elif "gpt" in self.model_name.lower():
                 has_credentials = bool(settings.openai_api_key)
             elif "claude" in self.model_name.lower():
                 has_credentials = bool(settings.anthropic_api_key)
             elif "gemini" in self.model_name.lower():
                 has_credentials = bool(settings.google_api_key)
             else:
-                has_credentials = bool(settings.openai_api_key or settings.google_api_key or settings.anthropic_api_key)
+                has_credentials = bool(
+                    settings.fireworks_api_key or settings.openai_api_key or settings.google_api_key or settings.anthropic_api_key
+                )
 
             if not has_credentials:
                 raise ValueError(
                     "Real LLM benchmark execution is BLOCKED: No external provider API keys configured in environment "
-                    "(OPENAI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY). Missing credentials must return BLOCKED, never silent Mock fallback."
+                    "(FIREWORKS_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY). Missing credentials must return BLOCKED, never silent Mock fallback."
                 )
+            self.orchestrator = AgentOrchestrator(provider=get_llm_provider(settings))
 
     def evaluate_case(self, case: EvaluationCase) -> CaseEvaluationResult:
         start_time = time.perf_counter()

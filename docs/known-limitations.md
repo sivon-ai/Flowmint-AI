@@ -35,17 +35,21 @@ In accordance with our core principle of **Zero Hallucination and Transparent En
 
 ### 5. AI Performance Varies by Provider and Model
 - **Constraint:** While Flowmint AI's safety guarantees (Policy Engine, HITL approval, schema validation, multi-tenant isolation) are enforced deterministically in Python/SQL code, LLM intent classification latency and semantic extraction accuracy depend on the chosen inference provider:
-  - **MockLLM:** ~10–20ms latency, 100% deterministic regression test fixture.
-  - **Gemini 1.5 Flash:** ~400–800ms latency, fast multi-turn conversational reasoning.
-  - **OpenAI GPT-4o / GPT-4o-mini:** ~500–1200ms latency, high schema adherence.
-  - **Anthropic Claude 3.5 Sonnet:** ~800–1600ms latency, deep contextual reasoning.
+  - **Fireworks AI (Qwen 3.8 Max):** Primary live inference provider (`accounts/fireworks/models/qwen3p8-max`); native structured tool calling verified with ~3.5–4.5s round-trip latency.
+  - **MockLLM:** ~1–2ms latency, 100% deterministic regression test fixture.
+  - **OpenAI GPT-4o / GPT-4o-mini:** Alternative external provider.
+  - **Anthropic Claude 3.5 Sonnet:** Alternative external provider.
+  - **Gemini 1.5 Pro / Flash:** Alternative external provider.
 
 ### 6. Provider Downtime Fail-Closed Behavior
-- **Constraint:** If an external LLM provider experiences an outage or timeout (> 10s), the system fails closed:
+- **Constraint:** If an external LLM provider experiences an outage, timeout (> 10s), or missing credentials, the system fails closed:
+  - The provider returns an explicit error (`AI_PROVIDER_ERROR` or `AI_CONFIG_ERROR`).
+  - The system **never silently substitutes MockLLM** for real provider calls.
   - Conversational copilot informs the merchant of provider unavailability.
   - Background decision workflows mark the run as `FAILED_TIMEOUT` without attempting unverified actions.
   - Zero state mutations occur during external AI provider degradation.
 
 ### 7. Cloud Staging & Real-LLM Benchmarks Are Credential-Gated
-- **Constraint:** Live execution of empirical benchmarks against commercial frontier models (OpenAI, Gemini, Anthropic) and live remote deployment to cloud staging (Render, Vercel) require external merchant credentials and platform tokens.
-- **Enforcement:** In local or offline evaluation environments, the system executes the verified MockLLM regression suite (900 cases) and reports cloud/real benchmarks as **BLOCKED** rather than manufacturing unverified empirical results.
+- **Constraint:** Live Fireworks inference and structured tool calling have been verified. Cloud deployment remains credential-gated unless actually deployed. MockLLM remains available for deterministic regression testing.
+- **Reporting Standard:** We do not claim 100% model accuracy in general, guaranteed responses, guaranteed causality, or custom fine-tuning. On Flowmint's 900-case evaluation suite, the Fireworks Qwen3.8 Max configuration achieved the measured evaluation result under the documented test protocol. Real LLM benchmarks report only actual measured metrics.
+

@@ -36,11 +36,27 @@ class AgentOrchestrator:
     """Central router and persistence orchestrator for Flowmint AI agents."""
 
     def __init__(self, provider: LLMProvider | None = None):
-        self.provider = provider or get_llm_provider()
-        self.buyer_agent = BuyerAgent(self.provider)
-        self.analytics_agent = AnalyticsAgent(self.provider)
-        self.growth_agent = GrowthAgent(self.provider)
-        self.recovery_agent = RecoveryAgent(self.provider)
+        self._custom_provider = provider
+
+    @property
+    def provider(self) -> LLMProvider:
+        return self._custom_provider or get_llm_provider()
+
+    @property
+    def buyer_agent(self) -> BuyerAgent:
+        return BuyerAgent(self.provider)
+
+    @property
+    def analytics_agent(self) -> AnalyticsAgent:
+        return AnalyticsAgent(self.provider)
+
+    @property
+    def growth_agent(self) -> GrowthAgent:
+        return GrowthAgent(self.provider)
+
+    @property
+    def recovery_agent(self) -> RecoveryAgent:
+        return RecoveryAgent(self.provider)
 
     def route_intent(self, message: str) -> str:
         """

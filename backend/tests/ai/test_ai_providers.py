@@ -58,6 +58,14 @@ class TestLLMProviders:
         with pytest.raises(FlowmintError):
             get_llm_provider(s_err)
 
+        s_fw_err = Settings(ai_provider="fireworks", fireworks_api_key="")
+        with pytest.raises(FlowmintError):
+            get_llm_provider(s_fw_err)
+
+        s_fw_ok = Settings(ai_provider="fireworks", fireworks_api_key="fw_test_key_xyz")
+        from app.ai.providers.fireworks_provider import FireworksProvider
+        assert isinstance(get_llm_provider(s_fw_ok), FireworksProvider)
+
 
 class TestEmbeddingProviders:
     @pytest.mark.asyncio
