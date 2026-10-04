@@ -111,13 +111,13 @@ export default function TraceViewerPage() {
       case 'opportunity_detected':
         return <Zap className="w-5 h-5 text-amber-400" />;
       case 'agent_run':
-        return <GitBranch className="w-5 h-5 text-blue-400" />;
+        return <GitBranch className="w-5 h-5 text-brand-400" />;
       case 'tool_call':
-        return <FileCode className="w-5 h-5 text-purple-400" />;
+        return <FileCode className="w-5 h-5 text-accent" />;
       case 'action_plan':
-        return <Layers className="w-5 h-5 text-cyan-400" />;
+        return <Layers className="w-5 h-5 text-amber-400" />;
       case 'audit_log':
-        return <ShieldCheck className="w-5 h-5 text-indigo-400" />;
+        return <ShieldCheck className="w-5 h-5 text-brand-300" />;
       case 'approval':
         return <CheckCircle2 className="w-5 h-5 text-emerald-400" />;
       case 'execution':
@@ -136,7 +136,7 @@ export default function TraceViewerPage() {
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">End-to-End Trace Viewer</h1>
           <p className="text-sm text-surface-300 mt-1">
-            Complete causal DAG reconstruction from Opportunity Signal to Observed Revenue Outcome.
+            End-to-End Execution Trace & Decision DAG from Opportunity Signal to Observed Revenue Outcome.
           </p>
         </div>
       </div>
@@ -187,7 +187,7 @@ export default function TraceViewerPage() {
       {/* Trace Timeline Canvas */}
       {loading ? (
         <div className="p-16 text-center text-surface-400 animate-pulse bg-surface-900/40 rounded-2xl border border-surface-800">
-          Reconstructing full causal DAG timeline...
+          Reconstructing execution trace & decision DAG timeline...
         </div>
       ) : error ? (
         <div className="p-8 text-center text-red-400 bg-red-950/20 border border-red-900/30 rounded-xl">

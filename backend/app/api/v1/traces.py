@@ -4,6 +4,8 @@ Flowmint AI — Trace Viewer API Endpoints (Phase 4).
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +16,15 @@ from app.schemas.common import ApiResponse
 from app.services.trace_service import TraceService
 
 router = APIRouter(prefix="/traces", tags=["Traces"])
+
+
+@router.get("", response_model=ApiResponse[list[dict[str, Any]]])
+async def list_traces(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    traces = await TraceService.list_recent_traces(db, current_user.merchant_id)
+    return ApiResponse.ok(traces)
 
 
 @router.get("/{trace_id}", response_model=ApiResponse[TraceResponse])

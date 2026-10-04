@@ -146,7 +146,7 @@ export default function AICopilotPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-bold text-white">AI Copilot</h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-500/10 text-brand-400 border border-brand-500/20">
-              Phase 2B Active
+              Multi-Agent Revenue Intelligence
             </span>
           </div>
           <p className="text-surface-300 mt-1">
@@ -342,7 +342,7 @@ export default function AICopilotPage() {
                         </div>
                         <div className="pt-2 border-t border-surface-800 flex justify-between text-[11px] text-surface-400">
                           <span>Target: <strong className="text-white">{m.structuredData.action_plan.target}</strong></span>
-                          <span>Requires Approval: <strong className="text-warning-400">YES (Phase 3)</strong></span>
+                          <span>Requires Approval: <strong className="text-warning-400">YES (Policy-Gated)</strong></span>
                         </div>
                       </div>
                     )}

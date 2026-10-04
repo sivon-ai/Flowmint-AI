@@ -63,10 +63,10 @@ export default function SimulationsPage() {
       {/* Header */}
       <div>
         <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-brand-500/20 text-brand-400 border border-brand-500/30">
-            PHASE 2B WHAT-IF SIMULATOR
+          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-accent/15 text-accent border border-accent/30">
+            WHAT-IF REVENUE SIMULATOR
           </span>
-          <span className="text-xs text-surface-400">Deterministic Financial Modelling</span>
+          <span className="text-xs text-surface-400">Deterministic Financial Modelling (SIMULATED Projections)</span>
         </div>
         <h1 className="text-3xl font-bold text-white mt-1">What-If Revenue Simulator</h1>
         <p className="text-surface-300 mt-0.5">
@@ -81,7 +81,7 @@ export default function SimulationsPage() {
           <span className="font-bold text-brand-400 uppercase tracking-wider mr-1">
             SIMULATION / ESTIMATE ONLY:
           </span>
-          Projections are calculated deterministically using store telemetry, standard margin ratios, and declared assumptions. Flowmint will NOT execute discounts or campaigns without Phase 3 merchant policy authorization.
+          Projections are calculated deterministically using store telemetry, standard margin ratios, and declared assumptions. Flowmint will NOT execute discounts or campaigns without Merchant Policy authorization and Human-in-the-Loop approval.
         </div>
       </div>
 

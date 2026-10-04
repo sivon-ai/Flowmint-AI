@@ -91,7 +91,7 @@ export default function AttributionPage() {
         );
       case 'ATTRIBUTED':
         return (
-          <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+          <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-brand-500/15 text-brand-300 border border-brand-400/30">
             ATTRIBUTED
           </span>
         );
@@ -104,7 +104,7 @@ export default function AttributionPage() {
       case 'SIMULATED':
       default:
         return (
-          <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+          <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-accent/15 text-accent border border-accent/30">
             SIMULATED
           </span>
         );
@@ -136,10 +136,10 @@ export default function AttributionPage() {
         <ShieldAlert className="w-5 h-5 text-brand-400 mt-0.5 shrink-0" />
         <div className="text-xs text-surface-300 space-y-1">
           <div><span className="font-semibold text-white">Strict Label Hierarchy: </span></div>
-          <div>• <span className="text-purple-400 font-bold">SIMULATED</span>: Forward projections from simulation models; never claimed as realized revenue.</div>
+          <div>• <span className="text-accent font-bold">SIMULATED</span>: Forward projections from simulation models; never claimed as realized revenue.</div>
           <div>• <span className="text-amber-400 font-bold">ESTIMATED</span>: Expected value calculated prior to action execution.</div>
           <div>• <span className="text-emerald-400 font-bold">OBSERVED</span>: Actual recorded customer transactions and captured payments.</div>
-          <div>• <span className="text-blue-400 font-bold">ATTRIBUTED</span>: Calculated net revenue impact after voucher costs and operational deductions.</div>
+          <div>• <span className="text-brand-400 font-bold">ATTRIBUTED</span>: Calculated net revenue impact after voucher costs and operational deductions.</div>
           <div>• <span className="text-brand-300 font-bold">DETERMINISTIC EVENT LINK</span>: Direct campaign/cart/coupon linkage; does not imply generalized causality.</div>
         </div>
       </div>
@@ -229,7 +229,7 @@ export default function AttributionPage() {
           <div className="p-12 text-center text-red-400">{error}</div>
         ) : outcomes.length === 0 ? (
           <div className="p-12 text-center text-surface-400">
-            No executed actions with recorded outcomes yet.
+            No recorded outcomes yet. Execute an approved ActionPlan to record an OBSERVED outcome.
           </div>
         ) : (
           <div className="overflow-x-auto">

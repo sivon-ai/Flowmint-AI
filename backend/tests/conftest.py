@@ -225,3 +225,13 @@ async def customer(db_session: AsyncSession, merchant: Merchant) -> Customer:
     await db_session.commit()
     await db_session.refresh(c)
     return c
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Restore canonical demo seed after test execution so merchant pages remain populated."""
+    from app.seed import seed
+    try:
+        asyncio.run(seed())
+    except Exception as e:
+        pass
+

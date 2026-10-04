@@ -75,15 +75,20 @@ class RevenueOverviewMetricsResponse(BaseModel):
     period_days: int
     total_revenue: float
     paid_orders: int
+    completed_orders: int | None = None
     average_order_value: float
+    aov: float | None = None
     total_carts: int
     abandoned_cart_count: int
     abandoned_cart_value: float
     abandonment_rate: float
+    cart_abandonment_rate: float | None = None
     conversion_rate: float
+    checkout_conversion_rate: float | None = None
     total_payments: int
     failed_payment_count: int
     failed_payment_value: float
     payment_failure_rate: float
     revenue_at_risk: float
+    active_opportunities_count: int | None = 0
     inventory_pressure: dict[str, int]

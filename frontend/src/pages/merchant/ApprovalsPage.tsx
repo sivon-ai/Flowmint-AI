@@ -87,7 +87,7 @@ export default function ApprovalsPage() {
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-brand-500/20 text-brand-400 border border-brand-500/30">
-              PHASE 3 GOVERNANCE
+              HITL GOVERNANCE
             </span>
             <span className="text-xs text-surface-400">Human-in-the-Loop Approval Queue</span>
           </div>
@@ -134,7 +134,7 @@ export default function ApprovalsPage() {
               <h3 className="text-base font-semibold text-white">No Approvals Found</h3>
               <p className="text-xs text-surface-400">
                 {statusFilter === 'pending'
-                  ? 'All autonomous actions have been reviewed or no pending proposals exist.'
+                  ? 'No pending approvals. Run the canonical Judge recovery scenario to generate a policy-gated approval.'
                   : `No records found with status '${statusFilter}'.`}
               </p>
             </div>

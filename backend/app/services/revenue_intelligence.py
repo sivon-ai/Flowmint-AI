@@ -65,7 +65,7 @@ class RevenueIntelligenceService:
             .options(selectinload(Cart.items))
             .where(
                 Cart.merchant_id == merchant_id,
-                Cart.status == "active",
+                Cart.status.in_(["active", "abandoned"]),
                 Cart.created_at >= cutoff,
             )
         )
@@ -146,21 +146,35 @@ class RevenueIntelligenceService:
         inv_res = await db.execute(inv_query)
         inv_row = inv_res.one()
 
+        from app.models.opportunity import Opportunity, OpportunityStatus
+        opp_count_res = await db.execute(
+            select(func.count(Opportunity.id)).where(
+                Opportunity.merchant_id == merchant_id,
+                Opportunity.status == OpportunityStatus.DETECTED.value,
+            )
+        )
+        active_opps_count = int(opp_count_res.scalar() or 0)
+
         return {
             "period_days": days,
             "total_revenue": float(total_revenue),
             "paid_orders": paid_orders_count,
+            "completed_orders": paid_orders_count,
             "average_order_value": float(aov),
+            "aov": float(aov),
             "total_carts": total_carts_count,
             "abandoned_cart_count": abandoned_cart_count,
             "abandoned_cart_value": float(abandoned_cart_value),
             "abandonment_rate": abandonment_rate,
+            "cart_abandonment_rate": abandonment_rate,
             "conversion_rate": conversion_rate,
+            "checkout_conversion_rate": conversion_rate,
             "total_payments": total_payment_attempts,
             "failed_payment_count": failed_payment_count,
             "failed_payment_value": float(failed_payment_value),
             "payment_failure_rate": payment_failure_rate,
             "revenue_at_risk": float(revenue_at_risk),
+            "active_opportunities_count": active_opps_count,
             "inventory_pressure": {
                 "total_tracked": int(inv_row.total_tracked or 0),
                 "low_stock_count": int(inv_row.low_stock_count or 0),
@@ -186,7 +200,7 @@ class RevenueIntelligenceService:
             )
             .where(
                 Cart.merchant_id == merchant_id,
-                Cart.status == "active",
+                Cart.status.in_(["active", "abandoned"]),
             )
             .order_by(Cart.updated_at.desc())
             .limit(limit)

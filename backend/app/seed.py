@@ -289,12 +289,12 @@ async def seed():
         db.add(opp_cross_sell)
 
         await db.commit()
-        print(f"✓ Seeded merchant: {merchant.name}")
-        print(f"✓ Seeded {len(created_products)} products across 4 categories")
-        print(f"✓ Seeded {len(created_customers)} customers")
-        print(f"✓ Seeded 37 abandoned carts totaling ₹1,42,000")
-        print(f"✓ Seeded 2 canonical revenue opportunities with inspectable evidence")
-        print(f"✓ Seeded MerchantPolicy (max 15% discount, 50k budget)")
+        print(f"[OK] Seeded merchant: {merchant.name}")
+        print(f"[OK] Seeded {len(created_products)} products across 4 categories")
+        print(f"[OK] Seeded {len(created_customers)} customers")
+        print(f"[OK] Seeded 37 abandoned carts totaling INR 1,42,000")
+        print(f"[OK] Seeded 2 canonical revenue opportunities with inspectable evidence")
+        print(f"[OK] Seeded MerchantPolicy (max 15% discount, 50k budget)")
         print(f"\n  Login: admin@techmart.in / admin123")
 
 

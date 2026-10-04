@@ -107,9 +107,9 @@ export default function OpportunitiesPage() {
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-brand-500/20 text-brand-400 border border-brand-500/30">
-              PHASE 2B DECISION LAYER
+              OPPORTUNITY ENGINE
             </span>
-            <span className="text-xs text-surface-400">Recommendation-Only Engine</span>
+            <span className="text-xs text-surface-400">Continuous Revenue Telemetry & Detection</span>
           </div>
           <h1 className="text-3xl font-bold text-white mt-1">Revenue Opportunities</h1>
           <p className="text-surface-300 mt-0.5">
@@ -129,8 +129,8 @@ export default function OpportunitiesPage() {
       <div className="p-4 rounded-xl bg-surface-900/60 border border-surface-700/60 flex items-start gap-3 text-xs text-surface-300">
         <ShieldAlert className="w-5 h-5 text-brand-400 shrink-0 mt-0.5" />
         <div>
-          <span className="font-semibold text-white">Bounded Autonomy Safety Guarantee: </span>
-          All recommendations and action plans in Phase 2B are strictly non-mutating proposals. No discounts, prices, customer communications, or inventory changes are executed autonomously.
+          <span className="font-semibold text-white">Bounded Autonomy Safety Controls: </span>
+          All recommendations and action plans are strictly bounded proposals. No discounts, prices, customer communications, or inventory changes are executed without Merchant Policy verification and Human-in-the-Loop authorization.
         </div>
       </div>
 
@@ -349,7 +349,7 @@ export default function OpportunitiesPage() {
                     <div>
                       <span className="text-surface-400">Requires Approval: </span>
                       <span className="text-warning-400 font-semibold">
-                        {actionPlan.requires_approval ? 'YES (Phase 3)' : 'NO'}
+                        {actionPlan.requires_approval ? 'YES (Policy-Gated)' : 'NO'}
                       </span>
                     </div>
                     <div>

@@ -2,13 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
+:root, html.light {
+  color-scheme: light;
+  --bg-page: 250 247 242;       /* #FAF7F2 - Light Background */
+  --bg-surface: 255 255 255;    /* #FFFFFF - Light Surface */
+  --bg-surface-alt: 243 237 229;/* #F3EDE5 - Light Surface Alt */
+  --color-primary: 90 56 37;    /* #5A3825 - Primary Brown */
+  --color-primary-dark: 62 38 25; /* #3E2619 - Primary Dark */
+  --color-accent: 183 121 62;   /* #B7793E - Accent Caramel */
+  --color-accent-hover: 90 56 37;
+  --border-color: 227 215 202;  /* #E3D7CA - Border */
+  --text-main: 43 33 27;        /* #2B211B - Text */
+  --text-muted: 119 104 93;     /* #77685D - Muted Text */
+  --color-success: 63 125 90;   /* #3F7D5A - Success */
+  --color-danger: 185 74 72;    /* #B94A48 - Danger */
+  --color-warning: 194 112 36;  /* #C27024 - Warning Amber */
+
+  /* Surface tokens */
+  --surface-50: 62 38 25;
+  --surface-100: 43 33 27;
+  --surface-200: 43 33 27;
+  --surface-300: 119 104 93;
+  --surface-400: 119 104 93;
+  --surface-700: 227 215 202;
+  --surface-800: 243 237 229;
+  --surface-900: 255 255 255;
+  --surface-950: 250 247 242;
+
+  /* Brand tokens */
+  --brand-50: 250 247 242;
+  --brand-100: 243 237 229;
+  --brand-200: 227 215 202;
+  --brand-300: 183 121 62;
+  --brand-400: 183 121 62;
+  --brand-500: 90 56 37;
+  --brand-600: 90 56 37;
+  --brand-700: 62 38 25;
+  --brand-800: 62 38 25;
+  --brand-900: 43 33 27;
+  --brand-950: 250 247 242;
+}
+
+html.dark {
+  color-scheme: dark;
+  --bg-page: 23 17 13;          /* #17110D - Dark Background */
+  --bg-surface: 33 24 18;       /* #211812 - Dark Surface */
+  --bg-surface-alt: 42 29 21;   /* #2A1D15 - Dark Surface Alt */
+  --color-primary: 139 94 60;   /* #8B5E3C - Primary Brown */
+  --color-primary-dark: 90 56 37; /* #5A3825 */
+  --color-accent: 197 138 82;   /* #C58A52 - Accent Caramel */
+  --color-accent-hover: 139 94 60;
+  --border-color: 59 43 32;     /* #3B2B20 - Dark Border */
+  --text-main: 247 241 234;     /* #F7F1EA - Creamy Ivory Text */
+  --text-muted: 185 170 155;    /* #B9AA9B - Muted Text */
+  --color-success: 99 167 125;  /* #63A77D - Soft Sage Success */
+  --color-danger: 224 106 102;  /* #E06A66 - Rose Danger */
+  --color-warning: 212 141 72;  /* #D48D48 - Golden Amber Warning */
+
+  /* Surface tokens */
+  --surface-50: 255 255 255;
+  --surface-100: 247 241 234;
+  --surface-200: 247 241 234;
+  --surface-300: 185 170 155;
+  --surface-400: 185 170 155;
+  --surface-700: 59 43 32;
+  --surface-800: 42 29 21;
+  --surface-900: 33 24 18;
+  --surface-950: 23 17 13;
+
+  /* Brand tokens */
+  --brand-50: 23 17 13;
+  --brand-100: 42 29 21;
+  --brand-200: 59 43 32;
+  --brand-300: 197 138 82;
+  --brand-400: 197 138 82;
+  --brand-500: 139 94 60;
+  --brand-600: 139 94 60;
+  --brand-700: 90 56 37;
+  --brand-800: 42 29 21;
+  --brand-900: 33 24 18;
+  --brand-950: 23 17 13;
+}
+
 @layer base {
   * {
     @apply border-surface-700;
   }
 
   body {
-    @apply bg-surface-950 text-surface-200;
+    @apply bg-surface-950 text-surface-200 transition-colors duration-200;
   }
 
   ::-webkit-scrollbar {
@@ -48,18 +130,18 @@
   }
 
   .card {
-    @apply bg-surface-900/80 backdrop-blur-sm border border-surface-700/50 rounded-xl
-           shadow-lg transition-all duration-300;
+    @apply bg-surface-900 border border-surface-700 rounded-xl
+           shadow-sm transition-all duration-200;
   }
 
   .card-hover {
-    @apply card hover:border-brand-500/30 hover:shadow-glow cursor-pointer;
+    @apply card hover:border-brand-400/50 hover:shadow-glow cursor-pointer;
   }
 
   .input-field {
     @apply bg-surface-800 border border-surface-700 rounded-lg px-3 py-2
-           text-surface-200 placeholder-surface-300/50
-           focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500
+           text-surface-200 placeholder-surface-300
+           focus:outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-400
            transition-all duration-200;
   }
 
@@ -68,19 +150,19 @@
   }
 
   .badge-success {
-    @apply badge bg-success-500/15 text-success-500;
+    @apply badge bg-success-500/15 text-success-500 border border-success-500/25;
   }
 
   .badge-warning {
-    @apply badge bg-warning-500/15 text-warning-500;
+    @apply badge bg-warning-500/15 text-warning-500 border border-warning-500/25;
   }
 
   .badge-danger {
-    @apply badge bg-danger-500/15 text-danger-500;
+    @apply badge bg-danger-500/15 text-danger-500 border border-danger-500/25;
   }
 
   .badge-info {
-    @apply badge bg-brand-500/15 text-brand-400;
+    @apply badge bg-brand-500/15 text-brand-400 border border-brand-400/25;
   }
 
   .stat-card {
@@ -88,7 +170,7 @@
   }
 
   .stat-value {
-    @apply text-2xl font-bold text-white;
+    @apply text-2xl font-bold text-surface-200;
   }
 
   .stat-label {
@@ -96,20 +178,54 @@
   }
 
   .table-header {
-    @apply text-xs font-semibold text-surface-300 uppercase tracking-wider;
+    @apply text-xs font-semibold text-surface-300 uppercase tracking-wider bg-surface-800/40;
   }
 
   .table-row {
-    @apply border-b border-surface-700/50 hover:bg-surface-800/50 transition-colors;
+    @apply border-b border-surface-700/60 hover:bg-surface-800/40 transition-colors;
   }
 
   .nav-link {
     @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-           text-surface-300 hover:text-white hover:bg-surface-800
+           text-surface-300 hover:text-surface-200 hover:bg-surface-800/70
            transition-all duration-200;
   }
 
   .nav-link-active {
-    @apply nav-link bg-brand-600/15 text-brand-400 border-l-2 border-brand-500;
+    @apply nav-link bg-brand-500/15 text-brand-400 border-l-2 border-brand-400 font-semibold;
   }
+}
+
+/* Light Mode Overrides for text-white on headings and cards to deep espresso */
+html.light .text-white:not(
+  .btn-primary,
+  .btn-primary *,
+  .btn-danger,
+  .btn-danger *,
+  [class*="bg-brand-600"],
+  [class*="bg-brand-600"] *,
+  [class*="bg-brand-700"],
+  [class*="bg-brand-700"] *,
+  [class*="bg-emerald-600"],
+  [class*="bg-emerald-600"] *,
+  [class*="bg-danger-600"],
+  [class*="bg-danger-600"] *,
+  [class*="bg-red-600"],
+  [class*="bg-red-600"] *,
+  [class*="bg-amber-600"],
+  [class*="bg-amber-600"] *,
+  [class*="badge-"]
+) {
+  color: #2B211B !important;
+}
+
+html.light input,
+html.light select,
+html.light textarea {
+  color: #2B211B;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #77685D;
 }

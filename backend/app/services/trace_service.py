@@ -274,3 +274,30 @@ class TraceService:
             "total_nodes": len(nodes),
             "timeline": nodes,
         }
+
+    @staticmethod
+    async def list_recent_traces(
+        db: AsyncSession,
+        merchant_id: uuid.UUID,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """List recent traces for the merchant."""
+        stmt = (
+            select(AgentRun)
+            .where(AgentRun.merchant_id == merchant_id, AgentRun.trace_id.isnot(None))
+            .order_by(desc(AgentRun.created_at))
+            .limit(limit)
+        )
+        res = await db.execute(stmt)
+        runs = res.scalars().all()
+        traces = []
+        for r in runs:
+            traces.append({
+                "trace_id": r.trace_id,
+                "event_type": r.agent_type,
+                "timestamp": r.created_at.isoformat(),
+                "action_id": None,
+                "agent": r.agent_type,
+            })
+        return traces
+

@@ -135,7 +135,7 @@ export default function StorefrontPage() {
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <a href="/dashboard" className="text-xs text-surface-300 hover:text-white transition-colors">
               Merchant Portal
             </a>

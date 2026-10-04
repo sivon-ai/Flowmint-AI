@@ -83,7 +83,15 @@ class EvaluationRunner:
         if self.runner_type == "real_llm":
             from app.config import get_settings
             settings = get_settings()
-            has_credentials = bool(settings.openai_api_key or settings.google_api_key or settings.anthropic_api_key)
+            if "gpt" in self.model_name.lower():
+                has_credentials = bool(settings.openai_api_key)
+            elif "claude" in self.model_name.lower():
+                has_credentials = bool(settings.anthropic_api_key)
+            elif "gemini" in self.model_name.lower():
+                has_credentials = bool(settings.google_api_key)
+            else:
+                has_credentials = bool(settings.openai_api_key or settings.google_api_key or settings.anthropic_api_key)
+
             if not has_credentials:
                 raise ValueError(
                     "Real LLM benchmark execution is BLOCKED: No external provider API keys configured in environment "

@@ -396,14 +396,14 @@ export default function JudgePage() {
         {/* STEP 5: What-if Simulation */}
         {currentStep === 5 && (
           <div className="space-y-6">
-            <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-xl flex items-center justify-between">
+            <div className="p-4 bg-brand-950/20 border border-accent/30 rounded-xl flex items-center justify-between">
               <div>
-                <span className="text-xs font-bold text-purple-300 uppercase tracking-widest">
+                <span className="text-xs font-bold text-accent uppercase tracking-widest">
                   Simulation Engine Projection (SIMULATED)
                 </span>
                 <h3 className="text-lg font-bold text-white mt-0.5">Monte Carlo & Arithmetic Model</h3>
               </div>
-              <span className="px-2.5 py-1 text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full">
+              <span className="px-2.5 py-1 text-xs font-bold bg-accent/15 text-accent border border-accent/40 rounded-full">
                 SIMULATED
               </span>
             </div>
@@ -426,8 +426,8 @@ export default function JudgePage() {
               </div>
               <div className="p-4 bg-surface-950 border border-surface-800 rounded-xl">
                 <div className="text-xs text-surface-400">Projected Net Impact</div>
-                <div className="text-2xl font-bold text-purple-400 mt-1">₹34,533</div>
-                <div className="text-[11px] text-purple-300 mt-1">Not actual revenue (SIMULATED)</div>
+                <div className="text-2xl font-bold text-accent mt-1">₹34,533</div>
+                <div className="text-[11px] text-accent/70 mt-1">Not actual revenue (SIMULATED)</div>
               </div>
             </div>
           </div>
@@ -722,7 +722,7 @@ export default function JudgePage() {
                 <div className="flex items-center gap-2 text-amber-300 font-semibold">
                   <span>[07]</span> Risk Engine: Classified as MEDIUM risk &rarr; HITL Approval Required
                 </div>
-                <div className="flex items-center gap-2 text-blue-300 font-semibold">
+                <div className="flex items-center gap-2 text-brand-300 font-semibold">
                   <span>[08]</span> Approval: Signed off by admin@techmart.in
                 </div>
                 <div className="flex items-center gap-2 text-emerald-400 font-semibold">
@@ -731,7 +731,7 @@ export default function JudgePage() {
                 <div className="flex items-center gap-2 text-emerald-400 font-bold">
                   <span>[10]</span> Outcome: 3 recovered orders, +₹8,865 net impact (OBSERVED)
                 </div>
-                <div className="flex items-center gap-2 text-purple-400 font-bold">
+                <div className="flex items-center gap-2 text-accent font-bold">
                   <span>[11]</span> Attribution: DETERMINISTIC EVENT LINK verified
                 </div>
                 <div className="flex items-center gap-2 text-brand-300 font-bold">

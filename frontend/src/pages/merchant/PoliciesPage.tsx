@@ -94,7 +94,7 @@ export default function PoliciesPage() {
       <div>
         <div className="flex items-center gap-2">
           <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-brand-500/20 text-brand-400 border border-brand-500/30">
-            PHASE 3 POLICY ENGINE
+            MERCHANT POLICY ENGINE
           </span>
           <span className="text-xs text-surface-400">Deterministic Guardrails & Autonomy Limits</span>
         </div>
