@@ -1,6 +1,6 @@
 # Flowmint AI — Known Limitations & Non-Goals
 
-In accordance with our core principle of **Zero Hallucination and Transparent Engineering**, this document explicitly records the design boundaries, known constraints, and non-goals of Flowmint AI.
+In accordance with our core principle of **Strict Grounding and Transparent Engineering**, this document explicitly records the design boundaries, known constraints, and non-goals of Flowmint AI.
 
 ---
 
@@ -51,5 +51,6 @@ In accordance with our core principle of **Zero Hallucination and Transparent En
 
 ### 7. Cloud Staging & Real-LLM Benchmarks Are Credential-Gated
 - **Constraint:** Live Fireworks inference and structured tool calling have been verified. Cloud deployment remains credential-gated unless actually deployed. MockLLM remains available for deterministic regression testing.
-- **Reporting Standard:** We do not claim 100% model accuracy in general, guaranteed responses, guaranteed causality, or custom fine-tuning. On Flowmint's 900-case evaluation suite, the Fireworks Qwen3.8 Max configuration achieved the measured evaluation result under the documented test protocol. Real LLM benchmarks report only actual measured metrics.
+- **Reporting Standard:** We do not claim 100% model accuracy in general, guaranteed responses, guaranteed causality, or custom fine-tuning. Flowmint's 900-case system evaluation achieved 100% under the documented deterministic evaluation protocol. Real LLM benchmarks report only actual measured metrics.
+
 

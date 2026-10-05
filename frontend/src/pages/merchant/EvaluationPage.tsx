@@ -95,9 +95,9 @@ export default function EvaluationPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">AI Evaluation Lab</h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">System Evaluation & LLM Verification Lab</h1>
           <p className="text-sm text-surface-300 mt-1">
-            Empirical quality and safety benchmarks across 900 multi-domain commerce test cases.
+            Flowmint 900-case deterministic system evaluation and live Fireworks AI empirical validation.
           </p>
         </div>
         <button
@@ -106,17 +106,52 @@ export default function EvaluationPage() {
           className="flex items-center gap-2 px-3 py-2 text-sm bg-surface-800 hover:bg-surface-700 text-white rounded-lg border border-surface-600 transition"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh Benchmarks
+          Refresh
         </button>
       </div>
 
-      {/* Mock vs Real LLM Separation Banner */}
-      <div className="p-4 bg-amber-950/20 border border-amber-500/30 rounded-xl flex items-start gap-3">
-        <Info className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
-        <div className="text-xs text-amber-200/90 leading-relaxed">
-          <span className="font-bold text-white">Strict Provider Separation: </span>
-          MockLLM evaluations test regression determinism, tool syntax, and fail-closed security logic.
-          MockLLM results are strictly isolated and <span className="font-semibold text-white underline">never</span> reported as real production LLM accuracy.
+      {/* 3-Tier Verification Structure Banner */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Tier 1: Real LLM */}
+        <div className="p-4 bg-emerald-950/30 border border-emerald-500/30 rounded-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Real LLM</span>
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono font-semibold">
+              LIVE VALIDATION: VERIFIED
+            </span>
+          </div>
+          <div className="text-sm font-semibold text-white mt-1">Fireworks AI — Qwen 3.8 Max</div>
+          <p className="text-xs text-surface-400 mt-1">
+            Live chat completion (HTTP 200), structured tool calling, and BuyerAgent + PostgreSQL flow verified.
+          </p>
+        </div>
+
+        {/* Tier 2: System Evaluation */}
+        <div className="p-4 bg-brand-950/30 border border-brand-500/30 rounded-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-brand-400 uppercase tracking-wider">System Evaluation</span>
+            <span className="text-[10px] bg-brand-500/20 text-brand-300 px-2 py-0.5 rounded font-mono font-semibold">
+              900 Cases
+            </span>
+          </div>
+          <div className="text-sm font-semibold text-white mt-1">Routing & Governance Protocol</div>
+          <p className="text-xs text-surface-400 mt-1">
+            Deterministic intent routing, tool authorization, merchant policy limits, and security sanitization.
+          </p>
+        </div>
+
+        {/* Tier 3: Mock Regression */}
+        <div className="p-4 bg-surface-900 border border-surface-800 rounded-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-surface-400 uppercase tracking-wider">Mock Regression</span>
+            <span className="text-[10px] bg-surface-800 text-surface-300 px-2 py-0.5 rounded font-mono font-semibold">
+              Deterministic Offline
+            </span>
+          </div>
+          <div className="text-sm font-semibold text-white mt-1">CI Fast-Feedback Test Suite</div>
+          <p className="text-xs text-surface-400 mt-1">
+            Zero-network regression fixtures testing schema parsing, fail-closed handling, and state transitions.
+          </p>
         </div>
       </div>
 
@@ -138,9 +173,9 @@ export default function EvaluationPage() {
       {/* Benchmark Execution Card */}
       <div className="p-6 bg-surface-900 border border-surface-800 rounded-2xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
         <div>
-          <h2 className="text-base font-bold text-white">Run Comprehensive Evaluation Suite</h2>
+          <h2 className="text-base font-bold text-white">Execute 900-Case System Evaluation</h2>
           <p className="text-xs text-surface-300 mt-1">
-            Execute all 900 test cases against the selected provider to measure classification, safety, and hallucination rates.
+            Execute the 900-case suite to evaluate intent routing, tool authorization, safety bounds, and fail-closed policies.
           </p>
         </div>
 
@@ -151,9 +186,8 @@ export default function EvaluationPage() {
             disabled={running}
             className="bg-surface-950 text-white text-xs border border-surface-700 rounded-lg px-3 py-2.5 focus:outline-none focus:border-brand-500 font-medium"
           >
-            <option value="mock_llm">MockLLM (Regression Suite - Fast)</option>
-            <option value="gemini">Gemini 1.5 Flash (Production AI)</option>
-            <option value="openai">OpenAI GPT-4o-mini (Production AI)</option>
+            <option value="mock_llm">MockLLM (Deterministic System Evaluation)</option>
+            <option value="fireworks">Fireworks AI — Qwen 3.8 Max (Live Provider)</option>
           </select>
 
           <button
@@ -162,7 +196,7 @@ export default function EvaluationPage() {
             className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs rounded-lg transition shadow-lg disabled:opacity-50"
           >
             <Play className={`w-4 h-4 ${running ? 'animate-spin' : ''}`} />
-            {running ? 'Running 900 Cases...' : 'Start Benchmark'}
+            {running ? 'Evaluating 900 Cases...' : 'Run System Evaluation'}
           </button>
         </div>
       </div>

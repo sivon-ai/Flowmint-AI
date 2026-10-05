@@ -106,36 +106,60 @@ Response:
 
 ---
 
-## Real Benchmark vs Mock Regression Status
+## 3-Tier Verification Architecture
 
-Flowmint AI uses Fireworks AI's Qwen 3.8 Max model for live inference. MockLLM remains available for deterministic regression testing.
+Flowmint AI uses Fireworks AI's Qwen 3.8 Max for live inference and native structured tool calling. The project also maintains a separate 900-case deterministic system evaluation and MockLLM regression suite. The live Fireworks path has been empirically verified locally.
 
-### 1. MockLLM Regression Suite (Deterministic Baseline)
+### 1. REAL FIREWORKS LIVE VALIDATION — VERIFIED
+- **Active Model:** `accounts/fireworks/models/qwen3p8-max`
+- **API Authentication:** PASS (`GET /models` → `HTTP 200 OK`)
+- **Live Chat Completion:** PASS (`POST /chat/completions` → `HTTP 200 OK`, latency ~3,919 ms, total tokens: 145)
+- **Structured Tool Calling:** PASS (native function calling schema with `search_products`)
+- **BuyerAgent + PostgreSQL:** PASS (Grounded in retrieved catalog records; no unsupported claims were observed in this test; 2 tool calls, 2,826 tokens total, action plan strictly `None`)
+
+### 2. Flowmint 900-Case System Evaluation (Routing & Governance)
+- **Scope:** 900 multi-category scenarios testing system-level boundaries.
+- **Protocol Result:** "Flowmint's 900-case system evaluation achieved 100% under the documented deterministic evaluation protocol."
+- **Important Distinction:** The 900-case suite evaluates Flowmint's deterministic routing, authorization, policy, and security layers. It is maintained separately from live LLM generations and does NOT represent 900 live API calls.
+
+#### Scoring Methodology by Metric:
+1. **Intent Classification Accuracy (100.0%):**
+   - **Source of Prediction:** Orchestrator intent routing logic (`orchestrator.route_intent`).
+   - **Ground Truth:** `case.expected_agent` in the evaluation dataset.
+   - **Scoring Function:** Exact string match (`resolved_agent == expected_agent`).
+
+2. **Tool Selection Accuracy (100.0%):**
+   - **Source of Prediction:** Agent authorized tool schema registry (`tool_registry.get_schemas`).
+   - **Ground Truth:** `case.expected_tools` in the evaluation dataset.
+   - **Scoring Function:** Set containment verification against agent tool permissions.
+
+3. **Parameter Extraction Accuracy (100.0%):**
+   - **Source of Prediction:** In live calls, Pydantic schema validation (`search_products` parameters); in dataset validation, structural parameter conformity.
+   - **Ground Truth:** `case.expected_parameters`.
+   - **Scoring Function:** Pydantic type and range validation.
+
+4. **Safety / Policy Pass Rate (100.0%):**
+   - **Source of Prediction:** Deterministic Policy Engine (`PolicyEngine.evaluate`).
+   - **Ground Truth:** Discount caps (<=15%) and campaign limits.
+   - **Scoring Function:** Violations are rejected (`passed=False`), verified to fail closed.
+
+5. **Prompt Injection Resistance (100.0%):**
+   - **Source of Prediction:** Security sanitizer (`sanitize_user_input`).
+   - **Ground Truth:** Adversarial jailbreak patterns.
+   - **Scoring Function:** Input sanitized and untrusted data tags applied; zero escalated privileges granted.
+
+6. **Grounding Evaluation:**
+   - **Metric Level:** **High** (Qualitative basis: All product prices, stock levels, and SKUs are fetched directly via read-only PostgreSQL queries; no database mutation or discount tools are accessible to the LLM).
+
+### 3. MockLLM Regression Suite (Deterministic Baseline)
 - **Status:** **VERIFIED & PASS**
 - **Runner Type:** `mock_llm`
 - **Total Cases:** 900
 - **Passed Cases:** 900 (100%)
-- **Intent Accuracy:** 1.0 (100.0%)
-- **Tool Selection Accuracy:** 1.0 (100.0%)
-- **Safety / Policy Compliance:** 1.0 (100.0%)
-- **Prompt Injection Resistance:** 1.0 (100.0%)
 - **Average Latency:** 1.4 ms
 - **Purpose:** Fast, repeatable regression testing in CI without external network dependency.
 
-### 2. Real Fireworks Benchmark (`accounts/fireworks/models/qwen3p8-max`)
-- **Status:** **VERIFIED ONLY WHERE ACTUAL MEASURED RESULTS EXIST**
-- **Model:** `accounts/fireworks/models/qwen3p8-max` (Fireworks AI)
-- **Authentication:** **VERIFIED** (`GET /models` → `HTTP 200 OK`)
-- **Live Chat Completion:** **VERIFIED** (`POST /chat/completions` → `HTTP 200 OK`, latency ~3,919 ms)
-- **Structured Tool Calling:** **VERIFIED** (Native function calling schema with `search_products`)
-- **BuyerAgent Live Flow:** **VERIFIED** (Read-only execution against live PostgreSQL catalog; 2 tool calls, 2,826 tokens total, action plan strictly `None`)
-- **Evaluation Benchmark Result:**
-  > "On Flowmint's 900-case evaluation suite, the Fireworks Qwen3.8 Max configuration achieved the measured evaluation result under the documented test protocol."
-  - **Dataset Size:** 900 evaluation cases
-  - **Intent Classification Accuracy:** 100.0%
-  - **Tool Selection Accuracy:** 100.0%
-  - **Parameter Extraction Accuracy:** 100.0%
-  - **Grounding Rate:** High (grounded in database tool results; zero database mutation tools exposed)
-  - **Failed Cases:** 0
 - **Important Note:** We do NOT claim 100% model accuracy in general, guaranteed responses, guaranteed causality, or custom fine-tuning. Cloud deployment remains credential-gated unless actually deployed.
+
+
 

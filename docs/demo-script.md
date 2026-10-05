@@ -36,7 +36,7 @@ Flowmint AI uses Fireworks AI's Qwen 3.8 Max model for live inference (`accounts
    - Buyer or Merchant enters natural language query (e.g. `"Find laptops or electronics under 70000"`).
    - Fireworks Qwen 3.8 Max processes the prompt and emits structured tool calls (`search_products`).
    - The tool executes strictly read-only queries against live PostgreSQL database catalog.
-   - Grounded summary returned with zero hallucinations and zero database mutations.
+   - Grounded in retrieved catalog records; no unsupported claims were observed in this test, and zero database mutations occurred.
 
 2. **Deterministic Revenue Governance Transition:**
    - Once LLM reasoning is demonstrated, show the bounded-autonomy revenue lifecycle:

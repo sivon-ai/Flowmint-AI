@@ -162,7 +162,7 @@ export default function StorefrontPage() {
           </h1>
           <p className="text-surface-300 text-sm sm:text-base mt-3 max-w-xl mx-auto">
             Natural language product discovery powered by verified catalog tools, live stock checks,
-            and zero hallucinations.
+            and grounded catalog results.
           </p>
 
           {/* Search Box */}

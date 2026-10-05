@@ -102,19 +102,21 @@ For evaluators and competition judges, Flowmint AI includes an end-to-end intera
 
 ---
 
-## 🧪 AI Evaluation Benchmark (900 Cases)
+## 🧪 Flowmint 900-Case System Evaluation & Live LLM Validation
 
-Flowmint AI features a rigorous 900-case evaluation suite across 7 distinct categories:
+Flowmint AI uses Fireworks AI's Qwen 3.8 Max for live inference and native structured tool calling. The project also maintains a separate 900-case deterministic system evaluation and MockLLM regression suite. The live Fireworks path has been empirically verified locally.
 
-- **500 Buyer Queries:** Complex semantic search, catalog filtering, anti-hallucination inventory checks.
-- **100 Analytics Queries:** Multi-period sales aggregations and conversion calculations.
-- **100 Growth Queries:** Co-purchase recommendations and bundle affinity discovery.
-- **50 Recovery Queries:** Abandoned cart identification and eligibility verification.
-- **50 Adversarial Policy Bypass Attempts:** Prompt injections attempting discounts > 15% (100% blocked).
-- **50 Direct Prompt Injections:** Jailbreaks attempting privilege escalation (100% neutralized).
-- **50 System Failure / Degraded Cases:** Network timeouts and malformed JSON payloads (100% fail-closed).
+### 1. REAL FIREWORKS LIVE VALIDATION — VERIFIED
+- **Active Model:** `accounts/fireworks/models/qwen3p8-max`
+- **API Authentication:** PASS (`GET /models` → `HTTP 200 OK`)
+- **Live Chat Completion:** PASS (`POST /chat/completions` → `HTTP 200 OK`, latency ~3,919ms, total tokens: 145)
+- **Structured Tool Calling:** PASS (native function calls: `search_products(query='laptop', max_price=70000, limit=20)`)
+- **BuyerAgent + PostgreSQL Flow:** PASS (Grounded in retrieved catalog records; no unsupported claims were observed in this test; total tokens: 2,826; action plan strictly `None`)
 
-> **MockLLM vs Real LLM Separation:** MockLLM regression runs are strictly separated from Real LLM evaluations. On Flowmint's 900-case evaluation suite, the Fireworks Qwen3.8 Max configuration achieved the measured evaluation result under the documented test protocol. Mock latency is never conflated with cloud provider latency.
+### 2. Flowmint 900-Case System Evaluation
+- **Scope:** 900 multi-category commerce scenarios (500 Buyer, 100 Analytics, 100 Growth, 50 Recovery, 50 Adversarial Policy Bypass, 50 Prompt Injections, 50 Degraded Failure scenarios).
+- **Protocol:** Flowmint's 900-case system evaluation achieved 100% under the documented deterministic evaluation protocol.
+- **Measurement:** Evaluates deterministic intent routing (`orchestrator.route_intent`), tool authorization scopes, merchant policy boundaries (<=15% discount limit), and security input sanitization. The 900-case suite evaluates system governance and is maintained separately from live LLM inference.
 
 
 ---
