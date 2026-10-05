@@ -45,6 +45,7 @@ class AttributionService:
         attribution_method: str = AttributionMethod.DETERMINISTIC_EVENT.value,
         label: str = AttributionLabel.OBSERVED.value,
         custom_metrics: dict[str, Any] | None = None,
+        trace_id: str | None = None,
     ) -> ActionOutcome:
         """
         Computes ground-truth observed outcomes from completed orders/carts
@@ -129,7 +130,7 @@ class AttributionService:
             action_id=action_plan_id,
             execution_id=execution_id,
             opportunity_id=plan.opportunity_id,
-            trace_id=f"trc_out_{uuid.uuid4().hex[:12]}",
+            trace_id=trace_id or (custom_metrics.get("trace_id") if custom_metrics else None) or f"trc_out_{uuid.uuid4().hex[:12]}",
             label=label,
             attribution_method=attribution_method,
             confidence=confidence,

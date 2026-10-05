@@ -99,6 +99,7 @@ class ApprovalDecisionRequest(BaseModel):
 
 class ActionExecuteRequest(BaseModel):
     idempotency_key: str = Field(..., description="Unique client-supplied idempotency key")
+    trace_id: str | None = Field(default=None, description="Optional trace ID for correlation")
 
 
 class ActionExecuteResponse(BaseModel):

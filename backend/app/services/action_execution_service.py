@@ -186,6 +186,7 @@ class ActionExecutionService:
         idempotency_key: str,
         user_id: uuid.UUID | None = None,
         agent_name: str = "growth_agent",
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Executes a validated, approved ActionPlan through the appropriate controlled write tool.
@@ -382,7 +383,7 @@ class ActionExecutionService:
         tool_ctx = ToolContext(
             merchant_id=merchant_id,
             user_id=user_id,
-            trace_id=f"trc_exec_{uuid.uuid4().hex[:12]}",
+            trace_id=trace_id or f"trc_exec_{uuid.uuid4().hex[:12]}",
             db=db,
             is_read_only=False,  # Authorized write execution
         )
@@ -424,6 +425,7 @@ class ActionExecutionService:
                     merchant_id=merchant_id,
                     action_plan_id=action_plan.id,
                     execution_id=execution.id,
+                    trace_id=tool_ctx.trace_id,
                 )
             except Exception as attr_err:
                 logger.warning(f"Attribution recording warning: {attr_err}")

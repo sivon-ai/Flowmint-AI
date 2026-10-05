@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import ThemeToggle from '../common/ThemeToggle';
 import {
   LayoutDashboard,
@@ -44,6 +44,18 @@ const navItems = [
 ];
 
 export default function DashboardLayout({ user, onLogout }: Props) {
+  const location = useLocation();
+
+  const isItemActive = (to: string, isActive: boolean) => {
+    if (to === '/dashboard') {
+      return location.pathname === '/dashboard';
+    }
+    if (to === '/judge') {
+      return location.pathname === '/judge' || location.pathname.startsWith('/dashboard/judge');
+    }
+    return isActive;
+  };
+
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
@@ -69,8 +81,9 @@ export default function DashboardLayout({ user, onLogout }: Props) {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.to === '/dashboard' || item.to === '/judge'}
               className={({ isActive }) =>
-                isActive ? 'nav-link-active' : 'nav-link'
+                isItemActive(item.to, isActive) ? 'nav-link-active' : 'nav-link'
               }
             >
               <item.icon className="w-4.5 h-4.5" />

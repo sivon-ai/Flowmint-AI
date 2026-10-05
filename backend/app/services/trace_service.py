@@ -281,7 +281,7 @@ class TraceService:
         merchant_id: uuid.UUID,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
-        """List recent traces for the merchant."""
+        """List recent traces for the merchant from AgentRuns and AuditLogs."""
         stmt = (
             select(AgentRun)
             .where(AgentRun.merchant_id == merchant_id, AgentRun.trace_id.isnot(None))
@@ -291,13 +291,35 @@ class TraceService:
         res = await db.execute(stmt)
         runs = res.scalars().all()
         traces = []
+        seen = set()
         for r in runs:
-            traces.append({
-                "trace_id": r.trace_id,
-                "event_type": r.agent_type,
-                "timestamp": r.created_at.isoformat(),
-                "action_id": None,
-                "agent": r.agent_type,
-            })
-        return traces
+            if r.trace_id not in seen:
+                seen.add(r.trace_id)
+                traces.append({
+                    "trace_id": r.trace_id,
+                    "event_type": r.agent_name,
+                    "timestamp": r.created_at.isoformat(),
+                    "action_id": None,
+                    "agent": r.agent_name,
+                })
+
+        audit_stmt = (
+            select(AuditLog)
+            .where(AuditLog.merchant_id == merchant_id, AuditLog.trace_id.isnot(None))
+            .order_by(desc(AuditLog.created_at))
+            .limit(limit * 2)
+        )
+        audit_res = await db.execute(audit_stmt)
+        audits = audit_res.scalars().all()
+        for a in audits:
+            if a.trace_id not in seen:
+                seen.add(a.trace_id)
+                traces.append({
+                    "trace_id": a.trace_id,
+                    "event_type": a.event_type,
+                    "timestamp": a.created_at.isoformat(),
+                    "action_id": str(a.action_id) if a.action_id else None,
+                    "agent": a.agent or a.actor_id,
+                })
+        return traces[:limit]
 

@@ -136,6 +136,7 @@ async def execute_action(
         action_plan_id=action_id,
         idempotency_key=body.idempotency_key,
         user_id=current_user.id,
+        trace_id=body.trace_id,
     )
     await db.commit()
     return ApiResponse.ok(
