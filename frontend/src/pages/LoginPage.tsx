@@ -9,8 +9,8 @@ interface Props {
 
 export default function LoginPage({ onLogin }: Props) {
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('admin@techmart.in');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [merchantName, setMerchantName] = useState('');
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
@@ -83,6 +83,7 @@ export default function LoginPage({ onLogin }: Props) {
                   value={merchantName}
                   onChange={e => setMerchantName(e.target.value)}
                   placeholder="Your business name"
+                  autoComplete="organization"
                   required
                 />
               </div>
@@ -96,6 +97,7 @@ export default function LoginPage({ onLogin }: Props) {
                   value={fullName}
                   onChange={e => setFullName(e.target.value)}
                   placeholder="Your full name"
+                  autoComplete="name"
                   required
                 />
               </div>
@@ -110,6 +112,7 @@ export default function LoginPage({ onLogin }: Props) {
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="you@example.com"
+              autoComplete="email"
               required
             />
           </div>
@@ -122,6 +125,7 @@ export default function LoginPage({ onLogin }: Props) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
+              autoComplete={isRegister ? 'new-password' : 'current-password'}
               required
               minLength={8}
             />
@@ -146,12 +150,6 @@ export default function LoginPage({ onLogin }: Props) {
             {isRegister ? 'Already have an account? Sign in' : "Don't have an account? Register"}
           </button>
         </div>
-
-        {!isRegister && (
-          <div className="mt-4 text-center text-xs text-surface-300/60">
-            Demo: admin@techmart.in / admin123
-          </div>
-        )}
       </div>
     </div>
   );
