@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import CurrentUser, get_current_user, get_optional_current_user
 from app.database import get_db
 from app.models.governance import MerchantPolicy
 from app.models.opportunity import ActionPlan
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/policies", tags=["Policies & Governance"])
 @router.post("/evaluate", response_model=ApiResponse[PolicyEvaluateResponse])
 async def evaluate_policy(
     body: PolicyEvaluateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser | None = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -38,24 +38,31 @@ async def evaluate_policy(
     Evaluates an ActionPlan or proposed parameters against all policy rules.
     Does NOT execute any write actions.
     """
-    # Load merchant policy
-    stmt = select(MerchantPolicy).where(
-        MerchantPolicy.merchant_id == current_user.merchant_id,
-        MerchantPolicy.is_active == True,
-    )
-    res = await db.execute(stmt)
-    policy = res.scalar_one_or_none()
+    if current_user:
+        merchant_id = current_user.merchant_id
+        stmt = select(MerchantPolicy).where(
+            MerchantPolicy.merchant_id == merchant_id,
+            MerchantPolicy.is_active == True,
+        )
+        res = await db.execute(stmt)
+        policy = res.scalar_one_or_none()
+    else:
+        # Sandbox / Judge Walkthrough mode: evaluate against active merchant policy in database
+        stmt = select(MerchantPolicy).where(MerchantPolicy.is_active == True).limit(1)
+        res = await db.execute(stmt)
+        policy = res.scalar_one_or_none()
+        merchant_id = policy.merchant_id if policy else uuid.UUID("00000000-0000-0000-0000-000000000000")
 
     if body.action_plan_id:
         plan_stmt = select(ActionPlan).where(
             ActionPlan.id == body.action_plan_id,
-            ActionPlan.merchant_id == current_user.merchant_id,
+            ActionPlan.merchant_id == merchant_id,
         )
         plan_res = await db.execute(plan_stmt)
         plan = plan_res.scalar_one_or_none()
         if not plan:
             plan = ActionPlan(
-                merchant_id=current_user.merchant_id,
+                merchant_id=merchant_id,
                 action_type=body.action_type,
                 target=body.target,
                 parameters=body.parameters,
@@ -64,7 +71,7 @@ async def evaluate_policy(
             )
     else:
         plan = ActionPlan(
-            merchant_id=current_user.merchant_id,
+            merchant_id=merchant_id,
             action_type=body.action_type,
             target=body.target,
             parameters=body.parameters,
@@ -73,7 +80,7 @@ async def evaluate_policy(
         )
 
     context = PolicyContext(
-        merchant_id=current_user.merchant_id,
+        merchant_id=merchant_id,
         db=db,
         policy=policy,
         agent_name=body.agent_name,

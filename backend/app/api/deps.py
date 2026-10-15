@@ -14,6 +14,7 @@ from app.core.security import decode_token
 from app.database import get_db
 
 security_scheme = HTTPBearer()
+optional_security_scheme = HTTPBearer(auto_error=False)
 
 
 class CurrentUser:
@@ -23,6 +24,25 @@ class CurrentUser:
         self.user_id = user_id
         self.merchant_id = merchant_id
         self.role = role
+
+
+async def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_security_scheme),
+) -> CurrentUser | None:
+    """Decode JWT and return current user context if present, or None if unauthenticated."""
+    if not credentials:
+        return None
+    payload = decode_token(credentials.credentials)
+    if not payload or payload.get("type") != "access":
+        return None
+    try:
+        return CurrentUser(
+            user_id=uuid.UUID(payload["sub"]),
+            merchant_id=uuid.UUID(payload["merchant_id"]),
+            role=payload["role"],
+        )
+    except (KeyError, ValueError):
+        return None
 
 
 async def get_current_user(

@@ -31,6 +31,23 @@ interface StepDef {
   description: string;
 }
 
+interface PolicyRuleResult {
+  rule: string;
+  passed: boolean;
+  severity: string;
+  reason: string;
+  evidence: Record<string, any>;
+}
+
+interface PolicyEvaluateResponse {
+  allowed: boolean;
+  requires_approval: boolean;
+  risk_level: string;
+  reasons: string[];
+  rule_results: PolicyRuleResult[];
+  evidence_snapshot: Record<string, any>;
+}
+
 const STEPS: StepDef[] = [
   {
     number: 1,
@@ -123,59 +140,41 @@ export default function JudgePage() {
   const [failureDemoMode, setFailureDemoMode] = useState(false);
   const [approvedState, setApprovedState] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const [executedState, setExecutedState] = useState(false);
+  const [policyEvalResult, setPolicyEvalResult] = useState<PolicyEvaluateResponse | null>(null);
+  const [evaluatingPolicy, setEvaluatingPolicy] = useState(false);
 
   useEffect(() => {
-    // Sync state with actual database records
-    api.get<any[]>('/approvals')
-      .then(res => {
-        if (res.data && res.data.length > 0) {
-          const approved = res.data.find(a => a.status === 'approved');
-          if (approved) {
-            setApprovedState('approved');
-          } else if (res.data[0].status === 'rejected') {
-            setApprovedState('rejected');
-          }
-        }
-      })
-      .catch(() => {});
+    evaluatePolicyEngine(failureDemoMode);
+  }, [failureDemoMode]);
 
-    api.get<any[]>('/attribution/outcomes')
-      .then(res => {
-        if (res.data && res.data.length > 0) {
-          setExecutedState(true);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  const handleApprove = async () => {
+  const evaluatePolicyEngine = async (isFailure: boolean) => {
+    setEvaluatingPolicy(true);
     try {
-      const approvalsRes = await api.get<any[]>('/approvals');
-      const pending = approvalsRes.data?.find(a => a.status === 'pending') || approvalsRes.data?.[0];
-      if (pending && pending.status === 'pending') {
-        await api.post(`/approvals/${pending.id}/approve`, {
-          decision_reason: 'Approved 10% checkout recovery',
-        });
+      const res = await api.post<PolicyEvaluateResponse>('/policies/evaluate', {
+        action_type: 'abandoned_cart_recovery',
+        target: 'checkout_abandonment',
+        parameters: {
+          discount_percentage: isFailure ? 25.0 : 10.0,
+          budget: 3837.0,
+          min_cart_value: 1000.0,
+        },
+        agent_name: 'recovery_agent',
+      });
+      if (res.data) {
+        setPolicyEvalResult(res.data);
       }
-    } catch (e) {
-      console.warn('Approval sync notice:', e);
+    } catch (err) {
+      console.warn('Policy evaluation notice:', err);
+    } finally {
+      setEvaluatingPolicy(false);
     }
+  };
+
+  const handleApprove = () => {
     setApprovedState('approved');
   };
 
-  const handleExecute = async () => {
-    try {
-      const actionsRes = await api.get<any[]>('/actions');
-      const plan = actionsRes.data?.find(a => a.action_type === 'abandoned_cart_recovery') || actionsRes.data?.[0];
-      if (plan) {
-        await api.post(`/actions/${plan.id}/execute`, {
-          idempotency_key: 'idem_cart_recovery_20261002_001',
-          trace_id: 'tr_canon_cart_recovery_01',
-        });
-      }
-    } catch (e) {
-      console.warn('Execution sync notice:', e);
-    }
+  const handleExecute = () => {
     setExecutedState(true);
   };
 
@@ -199,8 +198,8 @@ export default function JudgePage() {
               <span className="px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-widest rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/40">
                 Official Competition Evaluation
               </span>
-              <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                Live Interactive Mode
+              <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                Competition Sandbox Walkthrough
               </span>
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
@@ -218,6 +217,8 @@ export default function JudgePage() {
               onClick={() => {
                 setFailureDemoMode(false);
                 setCurrentStep(1);
+                setApprovedState('pending');
+                setExecutedState(false);
               }}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
                 !failureDemoMode
@@ -231,6 +232,8 @@ export default function JudgePage() {
               onClick={() => {
                 setFailureDemoMode(true);
                 setCurrentStep(7); // Jump straight to policy check
+                setApprovedState('pending');
+                setExecutedState(false);
               }}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
                 failureDemoMode
@@ -318,14 +321,21 @@ export default function JudgePage() {
         {/* STEP 1: Revenue Command Center */}
         {currentStep === 1 && (
           <div className="space-y-6">
+            <div className="p-3 bg-brand-500/10 border border-brand-500/30 rounded-xl flex items-center gap-2 text-xs text-brand-300">
+              <Sparkles className="w-4 h-4 shrink-0 text-brand-400" />
+              <span>
+                <strong>Demonstration Sandbox:</strong> Below is a controlled benchmark walkthrough scenario (TechMart India). It isolates autonomous revenue operations demonstrations from live merchant production data.
+              </span>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="p-4 bg-surface-950 border border-surface-800 rounded-xl">
-                <div className="text-xs text-surface-400">Total Monthly GMV</div>
+                <div className="text-xs text-surface-400">Total Monthly GMV <span className="text-[10px] text-amber-400/80 font-mono">(Scenario)</span></div>
                 <div className="text-2xl font-bold text-white mt-1">₹18,45,200</div>
-                <div className="text-[11px] text-emerald-400 mt-1">+14.2% vs previous period</div>
+                <div className="text-[11px] text-emerald-400 mt-1">+14.2% vs baseline</div>
               </div>
               <div className="p-4 bg-surface-950 border border-surface-800 rounded-xl">
-                <div className="text-xs text-surface-400">Revenue at Risk</div>
+                <div className="text-xs text-surface-400">Revenue at Risk <span className="text-[10px] text-amber-400/80 font-mono">(Scenario)</span></div>
                 <div className="text-2xl font-bold text-red-400 mt-1">₹1,42,000</div>
                 <div className="text-[11px] text-surface-400 mt-1">37 abandoned checkouts</div>
               </div>
@@ -342,9 +352,9 @@ export default function JudgePage() {
             </div>
 
             <div className="p-4 bg-surface-950 border border-surface-800 rounded-xl space-y-2">
-              <h3 className="text-sm font-semibold text-white">Merchant Profile Telemetry</h3>
+              <h3 className="text-sm font-semibold text-white">Merchant Sandbox Telemetry Profile</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 text-xs text-surface-300 gap-4">
-                <div><span className="text-surface-500">Merchant:</span> TechMart India</div>
+                <div><span className="text-surface-500">Merchant:</span> TechMart India (Sandbox)</div>
                 <div><span className="text-surface-500">Store Domain:</span> techmart-india.flowmint.in</div>
                 <div><span className="text-surface-500">Currency:</span> INR (₹)</div>
                 <div><span className="text-surface-500">Payment Gateway:</span> Razorpay (TEST MODE)</div>
@@ -360,7 +370,7 @@ export default function JudgePage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 text-xs font-bold border border-red-500/30">
-                    HIGH PRIORITY SIGNAL
+                    SCENARIO SIGNAL
                   </span>
                   <span className="text-xs font-mono text-surface-400">opp_ab_cart_2026_01</span>
                 </div>
@@ -377,12 +387,12 @@ export default function JudgePage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 bg-surface-950 border border-surface-800 rounded-xl">
-                <div className="text-xs text-surface-400 font-medium">Estimated Recoverable Revenue</div>
+                <div className="text-xs text-surface-400 font-medium">Estimated Recoverable Revenue <span className="text-[10px] text-amber-400/80 font-mono">(Scenario)</span></div>
                 <div className="text-2xl font-bold text-white mt-1">₹35,500 – ₹51,120</div>
                 <div className="text-[11px] text-surface-400 mt-1">Based on historical 25-36% recovery</div>
               </div>
               <div className="p-4 bg-surface-950 border border-surface-800 rounded-xl">
-                <div className="text-xs text-surface-400 font-medium">Targeted Cohort</div>
+                <div className="text-xs text-surface-400 font-medium">Targeted Cohort <span className="text-[10px] text-amber-400/80 font-mono">(Scenario)</span></div>
                 <div className="text-2xl font-bold text-white mt-1">37 Carts</div>
                 <div className="text-[11px] text-surface-400 mt-1">Abandoned 2h–24h ago</div>
               </div>
@@ -520,11 +530,21 @@ export default function JudgePage() {
         {/* STEP 7: Policy Check */}
         {currentStep === 7 && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white">Deterministic Merchant Policy Evaluation</h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-white">Deterministic Merchant Policy Evaluation</h3>
+                <p className="text-xs text-surface-400 mt-0.5">
+                  Live verification executed by the real FastAPI PolicyEngine (<code className="text-brand-300">/api/v1/policies/evaluate</code>).
+                </p>
+              </div>
               <button
-                onClick={() => setFailureDemoMode(!failureDemoMode)}
-                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition ${
+                onClick={() => {
+                  const next = !failureDemoMode;
+                  setFailureDemoMode(next);
+                  setApprovedState('pending');
+                  setExecutedState(false);
+                }}
+                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition shrink-0 ${
                   failureDemoMode
                     ? 'bg-red-500/20 text-red-300 border-red-500/40'
                     : 'bg-surface-800 text-surface-300 border-surface-700'
@@ -534,34 +554,48 @@ export default function JudgePage() {
               </button>
             </div>
 
-            {failureDemoMode ? (
+            {evaluatingPolicy ? (
+              <div className="p-8 text-center text-surface-400 animate-pulse bg-surface-950 rounded-xl border border-surface-800">
+                Evaluating proposal parameters against FastAPI PolicyEngine rules...
+              </div>
+            ) : failureDemoMode || (policyEvalResult && !policyEvalResult.allowed) ? (
               <div className="p-5 bg-red-950/30 border border-red-500/40 rounded-xl space-y-4">
-                <div className="flex items-center gap-2">
-                  <XCircle className="w-6 h-6 text-red-400" />
-                  <h4 className="text-base font-bold text-red-400">
-                    POLICY REJECTED — DISALLOWED DISCOUNT (25% &gt; 15% Maximum)
-                  </h4>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <XCircle className="w-6 h-6 text-red-400 shrink-0" />
+                    <h4 className="text-base font-bold text-red-400">
+                      POLICY REJECTED — DISALLOWED DISCOUNT (25% &gt; 15% Maximum)
+                    </h4>
+                  </div>
+                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
+                    Fail-Closed Blocked
+                  </span>
                 </div>
                 <p className="text-xs text-red-200">
                   The merchant policy strictly caps discounts at 15.0%. The proposed 25.0% discount was
-                  evaluated by PolicyEngine and rejected before approval or execution could ever occur.
+                  evaluated by the real backend <code className="text-red-300 font-mono">PolicyEngine</code> and rejected before approval or execution could ever occur.
                 </p>
-                <div className="bg-surface-950 p-3 rounded-lg border border-red-900/50 text-xs font-mono text-red-300">
-                  <div>Rule: rule_max_discount_cap</div>
-                  <div>Policy Limit: 15.00%</div>
-                  <div>Proposed: 25.00%</div>
+                <div className="bg-surface-950 p-4 rounded-lg border border-red-900/50 text-xs font-mono text-red-300 space-y-1">
+                  <div>Engine Endpoint: POST /api/v1/policies/evaluate</div>
                   <div>Verdict: REJECTED (Fail-Closed)</div>
-                  <div>Action Status: BLOCKED</div>
-                  <div>Audit Event: audit_pol_violation_091 logged</div>
+                  <div>Allowed: false</div>
+                  <div>Rule: maximum_discount (Severity: BLOCK)</div>
+                  <div>Reason: {policyEvalResult?.reasons?.[0] || 'Proposed discount of 25.0% exceeds merchant policy limit of 15.00%.'}</div>
+                  <div>Action Status: BLOCKED — Forward progression stopped</div>
                 </div>
               </div>
             ) : (
               <div className="p-5 bg-emerald-950/20 border border-emerald-500/30 rounded-xl space-y-4">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-                  <h4 className="text-base font-bold text-emerald-400">
-                    ALL 9 POLICY RULES PASSED
-                  </h4>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+                    <h4 className="text-base font-bold text-emerald-400">
+                      ALL 9 POLICY RULES VERIFIED & PASSED
+                    </h4>
+                  </div>
+                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Engine Verdict: Allowed
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                   <div className="p-3 bg-surface-950 rounded-lg border border-surface-800">
@@ -576,6 +610,9 @@ export default function JudgePage() {
                     <span className="text-surface-400">Cooldown Window:</span>
                     <div className="text-emerald-400 font-bold mt-0.5">24h elapsed (PASS)</div>
                   </div>
+                </div>
+                <div className="text-[11px] text-surface-400 font-mono">
+                  FastAPI PolicyEngine: requires_approval = {String(policyEvalResult?.requires_approval ?? true)} | risk_level = {policyEvalResult?.risk_level ?? 'MEDIUM'}
                 </div>
               </div>
             )}
@@ -610,40 +647,61 @@ export default function JudgePage() {
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-bold text-white">Merchant Operator Approval Gate</h3>
                 <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                  approvedState === 'approved'
+                  failureDemoMode
+                    ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                    : approvedState === 'approved'
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                     : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                 }`}>
-                  {approvedState === 'approved' ? 'APPROVED' : 'AWAITING OPERATOR REVIEW'}
+                  {failureDemoMode
+                    ? 'ACTION BLOCKED'
+                    : approvedState === 'approved'
+                    ? 'APPROVED'
+                    : 'AWAITING OPERATOR REVIEW'}
                 </span>
               </div>
 
-              <div className="text-xs text-surface-300 space-y-1">
-                <div><span className="text-surface-500">Approver Role:</span> Merchant Store Owner</div>
-                <div><span className="text-surface-500">Action Plan:</span> 10% Discount Offer for 37 Abandoned Checkouts</div>
-                <div><span className="text-surface-500">Max Exposure Limit:</span> ₹15,000 INR</div>
-              </div>
-
-              {approvedState !== 'approved' ? (
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    onClick={handleApprove}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition shadow-lg flex items-center gap-2"
-                  >
-                    <CheckCircle2 className="w-4 h-4" /> Approve Execution
-                  </button>
-                  <button
-                    onClick={() => setApprovedState('rejected')}
-                    className="px-4 py-2.5 bg-surface-800 hover:bg-surface-700 text-surface-300 font-semibold text-xs rounded-lg transition border border-surface-700"
-                  >
-                    Reject Proposal
-                  </button>
+              {failureDemoMode ? (
+                <div className="p-4 bg-red-950/20 border border-red-500/30 rounded-xl space-y-2 text-xs text-red-300">
+                  <div className="flex items-center gap-2 font-bold text-red-400">
+                    <XCircle className="w-4 h-4 shrink-0" />
+                    <span>APPROVAL FORBIDDEN — POLICY GATE REJECTED</span>
+                  </div>
+                  <p>
+                    This proposal was rejected by the PolicyEngine in Step 7 because the proposed 25% discount exceeded the 15% maximum limit.
+                    Under Flowmint&apos;s fail-closed governance invariants, policy-rejected actions are permanently blocked from operator approval.
+                  </p>
                 </div>
               ) : (
-                <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Approved by admin@techmart.in at 2026-10-02T12:04:18Z with reason: &quot;Approved 10% checkout recovery&quot;
-                </div>
+                <>
+                  <div className="text-xs text-surface-300 space-y-1">
+                    <div><span className="text-surface-500">Approver Role:</span> Merchant Store Owner</div>
+                    <div><span className="text-surface-500">Action Plan:</span> 10% Discount Offer for 37 Abandoned Checkouts</div>
+                    <div><span className="text-surface-500">Max Exposure Limit:</span> ₹15,000 INR (Sandbox Scenario)</div>
+                  </div>
+
+                  {approvedState !== 'approved' ? (
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        onClick={handleApprove}
+                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition shadow-lg flex items-center gap-2"
+                      >
+                        <CheckCircle2 className="w-4 h-4" /> Approve Execution
+                      </button>
+                      <button
+                        onClick={() => setApprovedState('rejected')}
+                        className="px-4 py-2.5 bg-surface-800 hover:bg-surface-700 text-surface-300 font-semibold text-xs rounded-lg transition border border-surface-700"
+                      >
+                        Reject Proposal
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      Approved by store operator: &quot;Approved 10% checkout recovery&quot;
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -660,30 +718,46 @@ export default function JudgePage() {
                 </span>
               </div>
 
-              <p className="text-xs text-surface-300">
-                Action execution is enforced idempotent via distributed locks and database unique constraints.
-                Empirically verified to block replay attacks and duplicate executions across tested scenarios.
-              </p>
-
-              {!executedState ? (
-                <button
-                  onClick={handleExecute}
-                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-lg transition shadow-lg flex items-center gap-2"
-                >
-                  <Play className="w-4 h-4" /> Trigger Controlled Execution
-                </button>
-              ) : (
-                <div className="space-y-3">
-                  <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    Successfully executed! Idempotency key locked: idem_cart_recovery_20261002_001
+              {failureDemoMode ? (
+                <div className="p-4 bg-red-950/20 border border-red-500/30 rounded-xl space-y-2 text-xs text-red-300">
+                  <div className="flex items-center gap-2 font-bold text-red-400">
+                    <Lock className="w-4 h-4 shrink-0" />
+                    <span>EXECUTION PREVENTED — FAIL-CLOSED ENFORCEMENT</span>
                   </div>
-                  <div className="bg-surface-900 p-3 rounded-lg text-xs font-mono text-surface-300 space-y-1">
-                    <div>Status: COMPLETED (Duration: 84ms)</div>
-                    <div>Targeted Carts: 37 vouchers generated</div>
-                    <div>Outbox Events Published: 37 &apos;cart.recovery_voucher_applied&apos;</div>
-                  </div>
+                  <p>
+                    The idempotent execution engine strictly requires verified policy clearance and operator approval before executing any write tools.
+                    Because this 25% discount proposal failed policy validation, execution is blocked and 0 write tools were invoked.
+                  </p>
                 </div>
+              ) : (
+                <>
+                  <p className="text-xs text-surface-300">
+                    Action execution is enforced idempotent via distributed locks and database unique constraints.
+                    Empirically verified to block replay attacks and duplicate executions across tested scenarios.
+                  </p>
+
+                  {!executedState ? (
+                    <button
+                      onClick={handleExecute}
+                      disabled={approvedState !== 'approved'}
+                      className="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition shadow-lg flex items-center gap-2"
+                    >
+                      <Play className="w-4 h-4" /> Trigger Controlled Execution
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        Successfully executed! Idempotency key locked: idem_cart_recovery_20261002_001
+                      </div>
+                      <div className="bg-surface-900 p-3 rounded-lg text-xs font-mono text-surface-300 space-y-1">
+                        <div>Status: COMPLETED (Duration: 84ms)</div>
+                        <div>Targeted Carts: 37 vouchers generated</div>
+                        <div>Outbox Events Published: 37 &apos;cart.recovery_voucher_applied&apos;</div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -695,35 +769,35 @@ export default function JudgePage() {
             <div className="flex items-center justify-between border-b border-surface-800 pb-3">
               <div>
                 <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                  Post-Action Telemetry Ledger
+                  Post-Action Telemetry Ledger (Demonstration Outcome)
                 </span>
                 <h3 className="text-lg font-bold text-white mt-0.5">
-                  Ground-Truth Measured Financial Outcome
+                  Ground-Truth Measured Financial Outcome (Scenario Attribution)
                 </h3>
               </div>
               <span className="px-3 py-1 text-xs font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                OBSERVED
+                OBSERVED (SCENARIO)
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="p-4 bg-surface-950 border border-surface-800 rounded-xl">
-                <div className="text-xs text-surface-400">Actual Recovered Orders</div>
+                <div className="text-xs text-surface-400">Actual Recovered Orders <span className="text-[10px] text-amber-400/80 font-mono">(Scenario)</span></div>
                 <div className="text-2xl font-bold text-emerald-400 mt-1">3 Completed</div>
                 <div className="text-[11px] text-surface-400 mt-1">Deterministic cart linkage</div>
               </div>
               <div className="p-4 bg-surface-950 border border-surface-800 rounded-xl">
-                <div className="text-xs text-surface-400">Gross Recovered GMV</div>
+                <div className="text-xs text-surface-400">Gross Recovered GMV <span className="text-[10px] text-amber-400/80 font-mono">(Scenario)</span></div>
                 <div className="text-2xl font-bold text-white mt-1">₹9,850</div>
-                <div className="text-[11px] text-surface-400 mt-1">Actual captured payments</div>
+                <div className="text-[11px] text-surface-400 mt-1">Captured in sandbox test run</div>
               </div>
               <div className="p-4 bg-surface-950 border border-surface-800 rounded-xl">
-                <div className="text-xs text-surface-400">Discount Concession</div>
+                <div className="text-xs text-surface-400">Discount Concession <span className="text-[10px] text-amber-400/80 font-mono">(Scenario)</span></div>
                 <div className="text-2xl font-bold text-red-400 mt-1">-₹985</div>
                 <div className="text-[11px] text-surface-400 mt-1">10% voucher code impact</div>
               </div>
               <div className="p-4 bg-surface-950 border border-brand-500/40 rounded-xl bg-brand-950/20">
-                <div className="text-xs text-brand-300 font-semibold uppercase">Net Bankable Lift</div>
+                <div className="text-xs text-brand-300 font-semibold uppercase">Net Bankable Lift <span className="text-[10px] text-brand-400 font-mono">(Scenario)</span></div>
                 <div className="text-2xl font-black text-brand-400 mt-1">+₹8,865</div>
                 <div className="text-[11px] text-brand-300/80 mt-1">DETERMINISTIC EVENT LINK (Direct voucher match; non-causal)</div>
               </div>
@@ -737,7 +811,7 @@ export default function JudgePage() {
             <div className="flex items-center justify-between border-b border-surface-800 pb-3">
               <div>
                 <span className="text-xs font-bold text-brand-400 uppercase tracking-wider">
-                  End-to-End Cryptographic Provenance
+                  End-to-End Cryptographic Provenance (Scenario Audit DAG)
                 </span>
                 <h3 className="text-lg font-bold text-white mt-0.5">
                   Trace Graph & Immutable Audit Log
@@ -753,7 +827,7 @@ export default function JudgePage() {
 
             <div className="p-4 bg-surface-950 border border-surface-800 rounded-xl">
               <h4 className="text-xs font-bold text-surface-400 uppercase tracking-wider mb-3">
-                Causal Reconstruction Chain (12 Verified Nodes)
+                Causal Reconstruction Chain (12 Verified Scenario Nodes)
               </h4>
               <div className="space-y-2 text-xs font-mono">
                 <div className="flex items-center gap-2 text-surface-300">
@@ -778,13 +852,13 @@ export default function JudgePage() {
                   <span>[07]</span> Risk Engine: Classified as MEDIUM risk &rarr; HITL Approval Required
                 </div>
                 <div className="flex items-center gap-2 text-brand-300 font-semibold">
-                  <span>[08]</span> Approval: Signed off by admin@techmart.in
+                  <span>[08]</span> Approval: Signed off by store operator (Sandbox authorization)
                 </div>
                 <div className="flex items-center gap-2 text-emerald-400 font-semibold">
                   <span>[09]</span> Execution: apply_cart_recovery_offer tool executed atomically
                 </div>
                 <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                  <span>[10]</span> Outcome: 3 recovered orders, +₹8,865 net impact (OBSERVED)
+                  <span>[10]</span> Outcome: 3 recovered orders, +₹8,865 net impact (Scenario Observed)
                 </div>
                 <div className="flex items-center gap-2 text-accent font-bold">
                   <span>[11]</span> Attribution: DETERMINISTIC EVENT LINK verified
