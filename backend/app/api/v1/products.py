@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, File, Form, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, get_current_user, require_role
@@ -11,13 +11,54 @@ from app.database import get_db
 from app.schemas.common import ApiResponse
 from app.schemas.product import (
     ProductCreateRequest,
+    ProductImportConfirmRequest,
+    ProductImportParseResponse,
+    ProductImportResult,
     ProductResponse,
     ProductSearchParams,
     ProductUpdateRequest,
 )
 from app.services.product import ProductService
+from app.services.catalog_import import CatalogImportService
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+
+@router.post("/import/parse", response_model=ApiResponse[ProductImportParseResponse])
+async def parse_catalog_file(
+    file: UploadFile = File(...),
+    sheet_name: str | None = Form(default=None),
+    user: CurrentUser = Depends(require_role("owner", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload and parse a catalog file (.xlsx, .csv, .docx, .pdf) for merchant review.
+    Does NOT mutate catalog or persist records.
+    """
+    file_bytes = await file.read()
+    service = CatalogImportService(db)
+    result = await service.parse_and_preview(
+        file_bytes=file_bytes,
+        filename=file.filename or "uploaded_file",
+        merchant_id=user.merchant_id,
+        sheet_name=sheet_name,
+    )
+    return ApiResponse.ok(result)
+
+
+@router.post("/import/confirm", response_model=ApiResponse[ProductImportResult])
+async def confirm_catalog_import(
+    data: ProductImportConfirmRequest,
+    user: CurrentUser = Depends(require_role("owner", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Persist reviewed products into database with transaction boundaries and duplicate resolution.
+    Re-validates records before commit.
+    """
+    service = CatalogImportService(db)
+    result = await service.confirm_import(user.merchant_id, data)
+    return ApiResponse.ok(result)
 
 
 @router.get("", response_model=ApiResponse[list[ProductResponse]])

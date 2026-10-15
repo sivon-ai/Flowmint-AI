@@ -32,6 +32,68 @@ export interface InventoryInfo {
   is_in_stock: boolean;
 }
 
+export interface ProductImportRow {
+  row_index: number;
+  name: string;
+  sku: string;
+  price: number | null;
+  compare_at_price: number | null;
+  stock: number;
+  description: string | null;
+  category_name: string | null;
+  status: string;
+  validation_status: 'valid' | 'duplicate' | 'invalid' | 'file_duplicate';
+  validation_errors: string[];
+  is_existing: boolean;
+  existing_product_id: string | null;
+}
+
+export interface ProductImportSummary {
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  duplicate_rows: number;
+  file_duplicate_rows: number;
+  existing_skus_found: string[];
+}
+
+export interface ProductImportParseResponse {
+  file_name: string;
+  file_size: number;
+  format: string;
+  sheets: string[];
+  selected_sheet: string | null;
+  headers: string[];
+  column_mapping: Record<string, string>;
+  summary: ProductImportSummary;
+  rows: ProductImportRow[];
+  warnings: string[];
+}
+
+export interface ProductImportConfirmRow {
+  name: string;
+  sku: string;
+  price: number;
+  compare_at_price?: number | null;
+  stock: number;
+  description?: string | null;
+  category_name?: string | null;
+  status: string;
+}
+
+export interface ProductImportConfirmRequest {
+  duplicate_resolution: 'skip' | 'update';
+  rows: ProductImportConfirmRow[];
+}
+
+export interface ProductImportResult {
+  imported_count: number;
+  updated_count: number;
+  skipped_count: number;
+  failed_count: number;
+  errors: string[];
+}
+
 export interface Order {
   id: string;
   merchant_id: string;

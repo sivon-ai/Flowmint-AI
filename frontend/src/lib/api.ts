@@ -81,6 +81,35 @@ class ApiClient {
   put<T>(path: string, body?: unknown) { return this.request<T>('PUT', path, body); }
   patch<T>(path: string, body?: unknown) { return this.request<T>('PATCH', path, body); }
   delete<T>(path: string) { return this.request<T>('DELETE', path); }
+
+  async upload<T>(path: string, formData: FormData): Promise<ApiResponse<T>> {
+    const headers: Record<string, string> = {};
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
+
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (response.status === 204) {
+      return { success: true, data: null };
+    }
+
+    const json = await response.json();
+
+    if (!response.ok) {
+      throw new ApiError(
+        json.errors?.[0]?.message || 'Upload request failed',
+        json.errors?.[0]?.code || 'UNKNOWN',
+        response.status,
+      );
+    }
+
+    return json;
+  }
 }
 
 export class ApiError extends Error {

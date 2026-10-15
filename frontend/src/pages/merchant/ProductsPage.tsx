@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import type { Product } from '../../types';
-import { Plus, Search, Package, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, Package, Edit2, Trash2, Upload } from 'lucide-react';
+import ProductImportModal from '../../components/merchant/ProductImportModal';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const loadProducts = async () => {
     setLoading(true);
@@ -31,9 +33,18 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold text-white">Products</h1>
           <p className="text-surface-300 text-sm mt-1">Manage your product catalog</p>
         </div>
-        <button className="btn-primary flex items-center gap-2" onClick={() => setShowCreate(true)}>
-          <Plus className="w-4 h-4" /> Add Product
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="btn-secondary flex items-center gap-2"
+            onClick={() => setShowImport(true)}
+          >
+            <Upload className="w-4 h-4" /> Import Products
+          </button>
+          <button className="btn-primary flex items-center gap-2" onClick={() => setShowCreate(true)}>
+            <Plus className="w-4 h-4" /> Add Product
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -128,6 +139,18 @@ export default function ProductsPage() {
         <CreateProductModal
           onClose={() => setShowCreate(false)}
           onCreated={() => { setShowCreate(false); loadProducts(); }}
+        />
+      )}
+
+      {/* Bulk Catalog Import Modal */}
+      {showImport && (
+        <ProductImportModal
+          isOpen={showImport}
+          onClose={() => setShowImport(false)}
+          onImportComplete={() => {
+            setShowImport(false);
+            loadProducts();
+          }}
         />
       )}
     </div>

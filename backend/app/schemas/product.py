@@ -79,3 +79,68 @@ class ProductSearchParams(BaseModel):
     in_stock: bool | None = None
     sort_by: str = Field(default="created_at", pattern=r"^(name|price|created_at)$")
     sort_order: str = Field(default="desc", pattern=r"^(asc|desc)$")
+
+
+# --- Bulk Catalog Import Schemas ---
+
+class ProductImportRow(BaseModel):
+    row_index: int
+    name: str = ""
+    sku: str = ""
+    price: Decimal | None = None
+    compare_at_price: Decimal | None = None
+    stock: int = 0
+    description: str | None = None
+    category_name: str | None = None
+    status: str = "active"
+    validation_status: str = "valid"  # valid, duplicate, invalid, file_duplicate
+    validation_errors: list[str] = Field(default_factory=list)
+    is_existing: bool = False
+    existing_product_id: uuid.UUID | None = None
+
+
+class ProductImportSummary(BaseModel):
+    total_rows: int = 0
+    valid_rows: int = 0
+    invalid_rows: int = 0
+    duplicate_rows: int = 0
+    file_duplicate_rows: int = 0
+    existing_skus_found: list[str] = Field(default_factory=list)
+
+
+class ProductImportParseResponse(BaseModel):
+    file_name: str
+    file_size: int
+    format: str  # csv, xlsx, docx, pdf
+    sheets: list[str] = Field(default_factory=list)
+    selected_sheet: str | None = None
+    headers: list[str] = Field(default_factory=list)
+    column_mapping: dict[str, str] = Field(default_factory=dict)
+    summary: ProductImportSummary
+    rows: list[ProductImportRow]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ProductImportConfirmRow(BaseModel):
+    name: str = Field(..., min_length=1, max_length=500)
+    sku: str = Field(..., min_length=1, max_length=100)
+    price: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
+    compare_at_price: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=2)
+    stock: int = Field(default=0, ge=0)
+    description: str | None = None
+    category_name: str | None = None
+    status: str = Field(default="active", pattern=r"^(active|draft|archived)$")
+
+
+class ProductImportConfirmRequest(BaseModel):
+    duplicate_resolution: str = Field(default="skip", pattern=r"^(skip|update)$")
+    rows: list[ProductImportConfirmRow] = Field(..., min_length=1)
+
+
+class ProductImportResult(BaseModel):
+    imported_count: int = 0
+    updated_count: int = 0
+    skipped_count: int = 0
+    failed_count: int = 0
+    errors: list[str] = Field(default_factory=list)
+
