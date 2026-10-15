@@ -51,13 +51,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 font-mono">
-              DEMO DATASET: TECHMART INDIA
-            </span>
-            <span className="text-xs text-surface-400">Simulated Commerce Telemetry</span>
-          </div>
-          <h1 className="text-3xl font-bold text-white mt-1">Revenue Command Center</h1>
+          <h1 className="text-3xl font-bold text-white">Revenue Command Center</h1>
           <p className="text-surface-300 mt-0.5">Real-time revenue metrics, detected leakages, and proactive opportunities</p>
         </div>
 

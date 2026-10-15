@@ -20,6 +20,7 @@ export default function SimulationsPage() {
   const [minCartValue, setMinCartValue] = useState<number>(3000);
   const [maxAgeDays, setMaxAgeDays] = useState<number>(7);
   const [assumedConversionRate, setAssumedConversionRate] = useState<number>(20);
+  const [estimatedTraffic, setEstimatedTraffic] = useState<number>(500);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [result, setResult] = useState<SimulationResult | null>(null);
@@ -42,7 +43,7 @@ export default function SimulationsPage() {
         const payload = {
           discount_percentage: Number(discountPercent),
           min_order_value: Number(minCartValue),
-          estimated_traffic: 500,
+          estimated_traffic: Number(estimatedTraffic),
           assumed_conversion_rate: assumedConversionRate ? Number(assumedConversionRate) / 100 : undefined,
         };
         const res = await api.post<SimulationResult>('/simulations/offer', payload);
@@ -185,6 +186,26 @@ export default function SimulationsPage() {
                 />
                 <p className="text-[11px] text-surface-400 mt-1">
                   Lookback limit for recently abandoned checkout sessions.
+                </p>
+              </div>
+            )}
+
+            {/* Estimated Traffic (Offer only) */}
+            {simulationType === 'offer' && (
+              <div>
+                <label className="text-xs font-medium text-surface-300 mb-1 block">
+                  Estimated Monthly Traffic (Visitors)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="100"
+                  value={estimatedTraffic}
+                  onChange={(e) => setEstimatedTraffic(Number(e.target.value))}
+                  className="input text-sm w-full"
+                />
+                <p className="text-[11px] text-surface-400 mt-1">
+                  Estimated visitor count used for the offer conversion model.
                 </p>
               </div>
             )}

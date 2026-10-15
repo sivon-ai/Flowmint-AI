@@ -121,25 +121,6 @@ export default function DashboardLayout({ user, onLogout }: Props) {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        {/* Persistent Demo / Seed Data Banner */}
-        {user.email === 'admin@techmart.in' && (
-          <div className="bg-amber-500/10 border-b border-amber-500/25 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2.5 text-amber-200">
-              <span className="px-2 py-0.5 rounded font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                DEMO / EVALUATION DATASET
-              </span>
-              <span>
-                Canonical scenario: <strong>TechMart India</strong> (37 carts, ₹1,42,000 at risk). All telemetry, products, orders, and customer profiles shown are simulated demonstration data.
-              </span>
-            </div>
-            <NavLink
-              to="/judge"
-              className="text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-2 flex items-center gap-1 shrink-0"
-            >
-              Open /judge Walkthrough &rarr;
-            </NavLink>
-          </div>
-        )}
         <div className="p-6 lg:p-8 max-w-7xl mx-auto animate-fade-in">
           <Outlet />
         </div>

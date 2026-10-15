@@ -55,11 +55,7 @@ export default function ApprovalsPage() {
 
   const handleOpenDecisionModal = (id: string, type: 'approve' | 'reject') => {
     setDecisionModal({ isOpen: true, type, approvalId: id });
-    setDecisionReason(
-      type === 'approve'
-        ? 'Verified projected margins and customer eligibility.'
-        : 'Discount allocation exceeds current operating targets.'
-    );
+    setDecisionReason('');
   };
 
   const handleSubmitDecision = async () => {
