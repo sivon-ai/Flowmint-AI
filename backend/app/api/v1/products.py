@@ -55,6 +55,51 @@ async def create_product(
     return ApiResponse.ok(product)
 
 
+@router.get("/public", response_model=ApiResponse[list[ProductResponse]])
+async def list_public_products(
+    q: str | None = None,
+    category_id: uuid.UUID | None = None,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    service = ProductService(db)
+    search = ProductSearchParams(
+        q=q, category_id=category_id, min_price=min_price, max_price=max_price,
+        status="active", sort_by=sort_by, sort_order=sort_order,
+    )
+    pagination = PaginationParams(page=page, per_page=per_page)
+    products, meta = await service.list(None, search, pagination)
+    return ApiResponse.ok(products, meta=meta)
+
+
+@router.get("/search", response_model=ApiResponse[list[ProductResponse]])
+async def search_products(
+    q: str | None = None,
+    category_id: uuid.UUID | None = None,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = ProductService(db)
+    search = ProductSearchParams(
+        q=q, category_id=category_id, min_price=min_price, max_price=max_price,
+        status="active", sort_by=sort_by, sort_order=sort_order,
+    )
+    pagination = PaginationParams(page=page, per_page=per_page)
+    products, meta = await service.list(user.merchant_id, search, pagination)
+    return ApiResponse.ok(products, meta=meta)
+
+
 @router.get("/{product_id}", response_model=ApiResponse[ProductResponse])
 async def get_product(
     product_id: uuid.UUID,

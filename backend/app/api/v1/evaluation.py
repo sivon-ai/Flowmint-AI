@@ -15,7 +15,21 @@ from app.schemas.attribution import BenchmarkRunRequest, EvaluationBenchmarkResp
 from app.schemas.common import ApiResponse
 from app.services.benchmark_service import BenchmarkService
 
+from typing import Any
+
 router = APIRouter(prefix="/evaluation", tags=["Evaluation"])
+
+
+@router.get("/dataset", response_model=ApiResponse[dict[str, Any]])
+async def get_dataset_info(
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from app.ai.evaluation.dataset import get_dataset_breakdown
+    categories = get_dataset_breakdown()
+    return ApiResponse.ok({
+        "total_cases": sum(categories.values()),
+        "categories": categories,
+    })
 
 
 @router.get("/benchmarks", response_model=ApiResponse[list[EvaluationBenchmarkResponse]])

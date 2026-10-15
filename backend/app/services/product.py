@@ -192,7 +192,7 @@ class ProductService:
 
     async def list(
         self,
-        merchant_id: uuid.UUID,
+        merchant_id: uuid.UUID | None,
         search: ProductSearchParams,
         pagination: PaginationParams,
     ) -> tuple[list[ProductResponse], PaginationMeta]:
@@ -200,8 +200,9 @@ class ProductService:
         query = (
             select(Product)
             .options(selectinload(Product.attributes), selectinload(Product.inventory))
-            .where(Product.merchant_id == merchant_id)
         )
+        if merchant_id is not None:
+            query = query.where(Product.merchant_id == merchant_id)
 
         # Filters
         if search.status:

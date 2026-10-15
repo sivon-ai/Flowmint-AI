@@ -36,24 +36,32 @@ async def list_outcomes(
     return ApiResponse.ok([ActionOutcomeResponse.model_validate(o) for o in outcomes])
 
 
-@router.get("/before-vs-after", response_model=ApiResponse[dict[str, Any]])
+@router.get("/before-vs-after", response_model=ApiResponse[dict[str, Any] | None])
 async def get_general_before_vs_after(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     outcomes = await AttributionService.get_outcomes_for_merchant(db, current_user.merchant_id, limit=1)
     if outcomes:
-        report = await AttributionService.get_before_vs_after_report(db, current_user.merchant_id, outcomes[0].action_id)
         outcome = outcomes[0]
+        report = await AttributionService.get_before_vs_after_report(db, current_user.merchant_id, outcome.action_id)
+        affected = outcome.affected_entities or {}
+        cart_ids = affected.get("cart_ids") or affected.get("entities") or []
+        eligible_count = len(cart_ids) if isinstance(cart_ids, list) and cart_ids else int(affected.get("count", 0)) or (outcome.orders_attributed or 0)
+        conversion_rate = (
+            float(outcome.orders_attributed) / eligible_count
+            if eligible_count > 0 and outcome.orders_attributed
+            else 0.0
+        )
         return ApiResponse.ok({
-            "campaign_name": report.get("title") or "Cart Recovery Campaign",
+            "campaign_name": report.get("title") or "Revenue Action Recovery",
             "action_id": str(outcome.action_id),
             "trace_id": outcome.trace_id,
             "baseline_window": "Prior 7-Day Baseline",
             "observation_window": "Execution + 24h Window",
-            "eligible_entities_count": 37,
+            "eligible_entities_count": eligible_count,
             "actual_conversions_count": outcome.orders_attributed,
-            "conversion_rate": float(outcome.orders_attributed) / 37.0 if outcome.orders_attributed else 0.0,
+            "conversion_rate": conversion_rate,
             "observed_gross_revenue": float(outcome.gross_revenue),
             "discount_cost": float(outcome.discount_cost),
             "operational_cost": float(outcome.operational_cost),
@@ -62,23 +70,7 @@ async def get_general_before_vs_after(
             "attribution_method": outcome.attribution_method,
             "confidence": float(outcome.confidence),
         })
-    return ApiResponse.ok({
-        "campaign_name": "High Checkout Abandonment Recovery (Canonical Scenario)",
-        "action_id": "canonical-evaluation-baseline",
-        "trace_id": None,
-        "baseline_window": "Prior 24 Hours Telemetry",
-        "observation_window": "Post-Approval Recovery Window",
-        "eligible_entities_count": 37,
-        "actual_conversions_count": 0,
-        "conversion_rate": 0.0,
-        "observed_gross_revenue": 0.0,
-        "discount_cost": 0.0,
-        "operational_cost": 0.0,
-        "observed_net_revenue_impact": 0.0,
-        "label": "SIMULATED",
-        "attribution_method": "deterministic_event",
-        "confidence": 0.92,
-    })
+    return ApiResponse.ok(None)
 
 
 @router.get("/{action_id}", response_model=ApiResponse[ActionOutcomeResponse | None])

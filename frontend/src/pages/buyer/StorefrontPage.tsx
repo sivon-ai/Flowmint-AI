@@ -37,7 +37,8 @@ export default function StorefrontPage() {
 
   const loadFeaturedProducts = async () => {
     try {
-      const res = await api.get<Product[]>('/products?per_page=8');
+      const endpoint = api.isAuthenticated() ? '/products?per_page=8' : '/products/public?per_page=8';
+      const res = await api.get<Product[]>(endpoint);
       if (res.data) {
         setProducts(res.data);
       }
@@ -97,13 +98,13 @@ export default function StorefrontPage() {
             setProducts(mapped);
           } else {
             // Fallback to lexical catalog search
-            const catRes = await api.get<Product[]>(`/products/search?q=${encodeURIComponent(q)}`);
+            const catRes = await api.get<Product[]>(`/products?q=${encodeURIComponent(q)}`);
             if (catRes.data) setProducts(catRes.data);
           }
         }
       } else {
-        // Unauthenticated search: standard product search
-        const res = await api.get<Product[]>(`/products/search?q=${encodeURIComponent(q)}`);
+        // Unauthenticated search: public product catalog search
+        const res = await api.get<Product[]>(`/products/public?q=${encodeURIComponent(q)}`);
         if (res.data) {
           setProducts(res.data);
         }
