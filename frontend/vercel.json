@@ -4,7 +4,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://flowmint-ai-backend.onrender.com/api/$1"
+      "destination": "https://flowmint-ai.onrender.com/api/$1"
     },
     {
       "source": "/(.*)",
