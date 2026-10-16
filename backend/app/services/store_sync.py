@@ -34,6 +34,8 @@ from app.models.merchant import Merchant
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.store_connection import StoreConnection, StoreEntityMapping, StoreSyncJob
+from app.schemas.product import ShopifySyncResult
+from app.services.audit_service import AuditService
 from app.schemas.store import (
     CustomIngestCustomerItem,
     CustomIngestOrderItem,
@@ -111,7 +113,7 @@ class StoreSyncService:
         nonce = uuid.uuid4().hex
         state = f"{merchant_id}:{nonce}"
 
-        scopes = "read_products,read_orders,read_inventory,read_customers"
+        scopes = "read_products,write_products,read_orders,read_inventory,write_inventory,read_customers"
         redirect_uri = settings.shopify_redirect_uri or f"{settings.backend_public_url}/api/v1/stores/shopify/callback"
 
         auth_url = (
@@ -179,7 +181,7 @@ class StoreSyncService:
 
         # 4. Save connection with encrypted credentials
         encrypted = encrypt_credentials({"access_token": access_token, "shop": shop})
-        scopes = token_data.get("scope", "read_products,read_orders,read_inventory,read_customers")
+        scopes = token_data.get("scope", "read_products,write_products,read_orders,read_inventory,write_inventory,read_customers")
 
         # Check existing connection
         stmt = select(StoreConnection).where(
@@ -1385,3 +1387,376 @@ class StoreSyncService:
             onboarding["store_connected"] = True
             settings_dict["onboarding"] = onboarding
             m.settings = settings_dict
+
+    async def push_product_to_shopify(
+        self,
+        merchant_id: uuid.UUID,
+        product: Product,
+        changed_fields: dict[str, Any],
+        user_id: uuid.UUID | None = None,
+    ) -> ShopifySyncResult:
+        """
+        Push approved product modifications back to Shopify using the Shopify GraphQL Admin API.
+        Enforces tenant isolation, verified entity mappings, scope permissions, and records audit logs.
+        """
+        # 1. Check if product is mapped to a connected Shopify store
+        stmt = (
+            select(StoreEntityMapping, StoreConnection)
+            .join(StoreConnection, StoreEntityMapping.connection_id == StoreConnection.id)
+            .where(
+                StoreEntityMapping.merchant_id == merchant_id,
+                StoreEntityMapping.entity_type == "product",
+                StoreEntityMapping.internal_id == product.id,
+            )
+        )
+        row = (await self.db.execute(stmt)).first()
+        if not row:
+            # Unmapped product — do not send edits for manually created products
+            return ShopifySyncResult(
+                success=True,
+                status="skipped_local_product",
+                message="Product is managed locally in Flowmint and is not linked to an external Shopify store.",
+            )
+
+        mapping, conn = row
+
+        if conn.provider != "shopify" or conn.status != "connected":
+            return ShopifySyncResult(
+                success=False,
+                status="failed",
+                message=f"Store connection '{conn.store_name}' is not an active connected Shopify store (status: {conn.status}).",
+                external_product_id=mapping.external_id,
+                errors=["Shopify connection inactive"],
+            )
+
+        # 2. Permissions / Scopes verification
+        granted_scopes = [s.strip() for s in (conn.scopes or "").split(",") if s.strip()]
+        has_write_products = "write_products" in granted_scopes
+        has_write_inventory = "write_inventory" in granted_scopes
+
+        if not has_write_products:
+            error_msg = (
+                "Insufficient Shopify permissions: 'write_products' scope is required to push product updates to Shopify. "
+                "Please re-authorize your Shopify store in Flowmint Integrations to grant write permissions."
+            )
+            await AuditService.log_event(
+                db=self.db,
+                merchant_id=merchant_id,
+                actor_type="user",
+                actor_id=str(user_id or merchant_id),
+                event_type="product.shopify_sync_failed",
+                reason=f"Failed to push product '{product.name}' to Shopify: missing write_products scope",
+                execution_result={"errors": [error_msg], "product_id": str(product.id), "sku": product.sku},
+            )
+            await self.db.commit()
+            return ShopifySyncResult(
+                success=False,
+                status="permission_denied",
+                message=error_msg,
+                external_product_id=mapping.external_id,
+                errors=["Missing scope: write_products"],
+            )
+
+        if "inventory_quantity" in changed_fields and not has_write_inventory:
+            error_msg = (
+                "Insufficient Shopify permissions: 'write_inventory' scope is required to update inventory in Shopify. "
+                "Please re-authorize your Shopify store in Flowmint Integrations to grant inventory write permissions."
+            )
+            await AuditService.log_event(
+                db=self.db,
+                merchant_id=merchant_id,
+                actor_type="user",
+                actor_id=str(user_id or merchant_id),
+                event_type="product.shopify_sync_failed",
+                reason=f"Failed to push inventory for product '{product.name}' to Shopify: missing write_inventory scope",
+                execution_result={"errors": [error_msg], "product_id": str(product.id), "sku": product.sku},
+            )
+            await self.db.commit()
+            return ShopifySyncResult(
+                success=False,
+                status="permission_denied",
+                message=error_msg,
+                external_product_id=mapping.external_id,
+                errors=["Missing scope: write_inventory"],
+            )
+
+        # 3. Decrypt credentials
+        creds = decrypt_credentials(conn.encrypted_credentials)
+        access_token = creds.get("access_token")
+        shop = creds.get("shop")
+        if not access_token or not shop:
+            return ShopifySyncResult(
+                success=False,
+                status="failed",
+                message="Shopify credentials missing or corrupted. Please reconnect the store.",
+                external_product_id=mapping.external_id,
+                errors=["Invalid credentials"],
+            )
+
+        api_version = settings.shopify_api_version or "2024-01"
+        graphql_endpoint = f"https://{shop}/admin/api/{api_version}/graphql.json"
+        headers = {
+            "X-Shopify-Access-Token": access_token,
+            "Content-Type": "application/json",
+        }
+
+        # Format Global ID
+        raw_ext_id = mapping.external_id
+        product_gid = raw_ext_id if raw_ext_id.startswith("gid://") else f"gid://shopify/Product/{raw_ext_id}"
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            try:
+                # 4. Fetch existing product variants & locations from Shopify to resolve variant GID and inventory item GID
+                query = """
+                query getProductAndLocations($id: ID!) {
+                  product(id: $id) {
+                    id
+                    title
+                    descriptionHtml
+                    status
+                    variants(first: 10) {
+                      nodes {
+                        id
+                        sku
+                        price
+                        compareAtPrice
+                        inventoryItem {
+                          id
+                        }
+                      }
+                    }
+                  }
+                  locations(first: 5) {
+                    nodes {
+                      id
+                      name
+                      isActive
+                    }
+                  }
+                }
+                """
+                resp = await client.post(
+                    graphql_endpoint,
+                    json={"query": query, "variables": {"id": product_gid}},
+                    headers=headers,
+                )
+                if resp.status_code in (401, 403):
+                    return ShopifySyncResult(
+                        success=False,
+                        status="permission_denied",
+                        message=f"Shopify Admin API authorization error ({resp.status_code}): {resp.text}",
+                        external_product_id=mapping.external_id,
+                        errors=[f"HTTP {resp.status_code}: {resp.text}"],
+                    )
+
+                if resp.status_code != 200:
+                    return ShopifySyncResult(
+                        success=False,
+                        status="failed",
+                        message=f"Shopify Admin API error ({resp.status_code}): {resp.text}",
+                        external_product_id=mapping.external_id,
+                        errors=[f"HTTP {resp.status_code}: {resp.text}"],
+                    )
+
+                gql_data = resp.json()
+                if "errors" in gql_data and gql_data["errors"]:
+                    err_msgs = [e.get("message", "Shopify error") for e in gql_data["errors"]]
+                    is_perm = any("access" in m.lower() or "permission" in m.lower() or "scope" in m.lower() for m in err_msgs)
+                    return ShopifySyncResult(
+                        success=False,
+                        status="permission_denied" if is_perm else "failed",
+                        message="; ".join(err_msgs),
+                        external_product_id=mapping.external_id,
+                        errors=err_msgs,
+                    )
+
+                remote_product = gql_data.get("data", {}).get("product")
+                if not remote_product:
+                    return ShopifySyncResult(
+                        success=False,
+                        status="failed",
+                        message=f"Product with ID {product_gid} was not found on Shopify store.",
+                        external_product_id=mapping.external_id,
+                        errors=["Product not found on Shopify"],
+                    )
+
+                variants = remote_product.get("variants", {}).get("nodes", [])
+                primary_variant = variants[0] if variants else None
+                locations = [loc for loc in gql_data.get("data", {}).get("locations", {}).get("nodes", []) if loc.get("isActive")]
+                primary_location = locations[0] if locations else None
+
+                all_errors = []
+
+                # 5. Update top-level Product fields (title, descriptionHtml, status)
+                need_product_update = any(k in changed_fields for k in ("name", "description", "status"))
+                if need_product_update:
+                    product_input: dict[str, Any] = {"id": product_gid}
+                    if "name" in changed_fields:
+                        product_input["title"] = changed_fields["name"]
+                    if "description" in changed_fields:
+                        product_input["descriptionHtml"] = changed_fields["description"] or ""
+                    if "status" in changed_fields:
+                        st = str(changed_fields["status"]).lower()
+                        product_input["status"] = "ACTIVE" if st == "active" else ("ARCHIVED" if st == "archived" else "DRAFT")
+
+                    prod_mutation = """
+                    mutation productUpdate($input: ProductInput!) {
+                      productUpdate(input: $input) {
+                        product {
+                          id
+                          title
+                          status
+                        }
+                        userErrors {
+                          field
+                          message
+                        }
+                      }
+                    }
+                    """
+                    p_upd_resp = await client.post(
+                        graphql_endpoint,
+                        json={"query": prod_mutation, "variables": {"input": product_input}},
+                        headers=headers,
+                    )
+                    p_upd_json = p_upd_resp.json()
+                    user_errors = p_upd_json.get("data", {}).get("productUpdate", {}).get("userErrors", [])
+                    if user_errors:
+                        all_errors.extend([f"Product: {e.get('message')}" for e in user_errors])
+
+                # 6. Update Variant fields (price, compareAtPrice, sku)
+                need_variant_update = any(k in changed_fields for k in ("price", "compare_at_price", "sku"))
+                if need_variant_update and primary_variant:
+                    var_gid = primary_variant.get("id")
+                    var_input: dict[str, Any] = {"id": var_gid}
+                    if "price" in changed_fields:
+                        var_input["price"] = str(changed_fields["price"])
+                    if "compare_at_price" in changed_fields:
+                        var_input["compareAtPrice"] = str(changed_fields["compare_at_price"]) if changed_fields["compare_at_price"] is not None else None
+                    if "sku" in changed_fields:
+                        var_input["sku"] = changed_fields["sku"]
+
+                    var_mutation = """
+                    mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+                        productVariants {
+                          id
+                          sku
+                          price
+                          compareAtPrice
+                        }
+                        userErrors {
+                          field
+                          message
+                        }
+                      }
+                    }
+                    """
+                    v_upd_resp = await client.post(
+                        graphql_endpoint,
+                        json={"query": var_mutation, "variables": {"productId": product_gid, "variants": [var_input]}},
+                        headers=headers,
+                    )
+                    v_upd_json = v_upd_resp.json()
+                    v_user_errors = v_upd_json.get("data", {}).get("productVariantsBulkUpdate", {}).get("userErrors", [])
+                    if v_user_errors:
+                        all_errors.extend([f"Variant: {e.get('message')}" for e in v_user_errors])
+
+                # 7. Update Inventory quantity
+                if "inventory_quantity" in changed_fields and primary_variant and primary_location:
+                    inv_item = primary_variant.get("inventoryItem")
+                    if inv_item:
+                        inv_mutation = """
+                        mutation inventorySetQuantities($input: InventorySetQuantitiesInput!) {
+                          inventorySetQuantities(input: $input) {
+                            inventoryAdjustmentGroup {
+                              reason
+                              changes {
+                                name
+                                delta
+                                quantityAfterChange
+                              }
+                            }
+                            userErrors {
+                              field
+                              message
+                            }
+                          }
+                        }
+                        """
+                        inv_input = {
+                            "reason": "correction",
+                            "name": "available",
+                            "ignoreCompareQuantity": True,
+                            "quantities": [
+                                {
+                                    "inventoryItemId": inv_item["id"],
+                                    "locationId": primary_location["id"],
+                                    "quantity": int(changed_fields["inventory_quantity"]),
+                                }
+                            ],
+                        }
+                        inv_resp = await client.post(
+                            graphql_endpoint,
+                            json={"query": inv_mutation, "variables": {"input": inv_input}},
+                            headers=headers,
+                        )
+                        inv_json = inv_resp.json()
+                        inv_user_errors = inv_json.get("data", {}).get("inventorySetQuantities", {}).get("userErrors", [])
+                        if inv_user_errors:
+                            all_errors.extend([f"Inventory: {e.get('message')}" for e in inv_user_errors])
+
+                if all_errors:
+                    await AuditService.log_event(
+                        db=self.db,
+                        merchant_id=merchant_id,
+                        actor_type="user",
+                        actor_id=str(user_id or merchant_id),
+                        event_type="product.shopify_sync_failed",
+                        reason=f"Shopify rejected updates for '{product.name}': {', '.join(all_errors)}",
+                        execution_result={"errors": all_errors, "product_id": str(product.id)},
+                    )
+                    await self.db.commit()
+                    return ShopifySyncResult(
+                        success=False,
+                        status="failed",
+                        message=f"Shopify rejected product update: {'; '.join(all_errors)}",
+                        external_product_id=mapping.external_id,
+                        errors=all_errors,
+                    )
+
+                # 8. Success: Update connection last sync timestamp & write audit log
+                conn.last_sync_at = datetime.now(timezone.utc)
+                await AuditService.log_event(
+                    db=self.db,
+                    merchant_id=merchant_id,
+                    actor_type="user",
+                    actor_id=str(user_id or merchant_id),
+                    event_type="product.shopify_synced",
+                    reason=f"Successfully pushed product '{product.name}' (SKU: {product.sku}) updates to Shopify store",
+                    new_status=product.status,
+                    execution_result={
+                        "product_id": str(product.id),
+                        "external_id": mapping.external_id,
+                        "fields_updated": list(changed_fields.keys()),
+                    },
+                )
+                await self.db.commit()
+
+                return ShopifySyncResult(
+                    success=True,
+                    status="pushed",
+                    message=f"Successfully synchronized product '{product.name}' to Shopify store '{conn.store_name}'.",
+                    external_product_id=mapping.external_id,
+                    reconciled=True,
+                )
+
+            except Exception as e:
+                logger.exception("Error pushing product to Shopify: %s", e)
+                return ShopifySyncResult(
+                    success=False,
+                    status="failed",
+                    message=f"Network or API failure pushing to Shopify: {str(e)}",
+                    external_product_id=mapping.external_id,
+                    errors=[str(e)],
+                )

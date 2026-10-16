@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api, ApiError } from '../../lib/api';
-import type { Product, StoreConnection, StoreSyncStatus } from '../../types';
+import type { Product, StoreConnection, StoreSyncStatus, ProductUpdateRequest, ShopifySyncResult } from '../../types';
 import { Plus, Search, Package, Edit2, Trash2, Upload, RefreshCw, Store, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import ProductImportModal from '../../components/merchant/ProductImportModal';
 
@@ -10,6 +10,7 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   // Store integration & auto-sync state
   const [storeConnection, setStoreConnection] = useState<StoreConnection | null>(null);
@@ -240,6 +241,7 @@ export default function ProductsPage() {
                 <th className="table-header px-6 py-3 text-right">Price</th>
                 <th className="table-header px-6 py-3 text-center">Stock</th>
                 <th className="table-header px-6 py-3 text-center">Status</th>
+                <th className="table-header px-6 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -247,7 +249,19 @@ export default function ProductsPage() {
                 <tr key={product.id} className="table-row">
                   <td className="px-6 py-3.5">
                     <div>
-                      <div className="text-sm font-medium text-white">{product.name}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-white">{product.name}</span>
+                        {product.is_shopify_connected ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                            <Store className="w-3 h-3" />
+                            Shopify
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-surface-800 text-surface-400 border border-surface-700 px-1.5 py-0.5 rounded">
+                            Local
+                          </span>
+                        )}
+                      </div>
                       {product.attributes.length > 0 && (
                         <div className="flex gap-2 mt-1">
                           {product.attributes.slice(0, 3).map(a => (
@@ -288,12 +302,33 @@ export default function ProductsPage() {
                       {product.status}
                     </span>
                   </td>
+                  <td className="px-6 py-3.5 text-right">
+                    <button
+                      onClick={() => setEditingProduct(product)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-surface-800 hover:bg-surface-700 text-surface-200 hover:text-white border border-surface-700 transition"
+                      title="Edit product"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-brand-400" />
+                      <span>Edit</span>
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Edit Product Modal */}
+      {editingProduct && (
+        <EditProductModal
+          product={editingProduct}
+          onClose={() => setEditingProduct(null)}
+          onSaved={() => {
+            loadProducts();
+          }}
+        />
+      )}
 
       {/* Create Modal placeholder */}
       {showCreate && (
@@ -380,6 +415,308 @@ function CreateProductModal({ onClose, onCreated }: { onClose: () => void; onCre
             <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn-primary" disabled={submitting}>
               {submitting ? 'Creating...' : 'Create Product'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+interface EditProductModalProps {
+  product: Product;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function EditProductModal({ product, onClose, onSaved }: EditProductModalProps) {
+  const [name, setName] = useState(product.name);
+  const [sku, setSku] = useState(product.sku);
+  const [price, setPrice] = useState(String(product.price));
+  const [compareAtPrice, setCompareAtPrice] = useState(product.compare_at_price ? String(product.compare_at_price) : '');
+  const [stock, setStock] = useState(String(product.inventory?.quantity ?? product.inventory?.available ?? 0));
+  const [description, setDescription] = useState(product.description || '');
+  const [status, setStatus] = useState<'active' | 'draft' | 'archived'>(product.status);
+  const [syncToShopify, setSyncToShopify] = useState(Boolean(product.is_shopify_connected));
+  const [error, setError] = useState('');
+  const [syncResult, setSyncResult] = useState<ShopifySyncResult | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSyncResult(null);
+
+    // Form validations
+    if (!name.trim()) {
+      setError('Product name is required.');
+      return;
+    }
+    if (!sku.trim()) {
+      setError('SKU is required.');
+      return;
+    }
+    const numPrice = parseFloat(price);
+    if (isNaN(numPrice) || numPrice <= 0) {
+      setError('Price must be a valid positive number.');
+      return;
+    }
+    const numStock = parseInt(stock, 10);
+    if (isNaN(numStock) || numStock < 0) {
+      setError('Stock quantity must be a non-negative number.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload: ProductUpdateRequest = {
+        name: name.trim(),
+        sku: sku.trim(),
+        price: numPrice,
+        compare_at_price: compareAtPrice ? parseFloat(compareAtPrice) : null,
+        inventory_quantity: numStock,
+        description: description.trim() || undefined,
+        status,
+        sync_to_shopify: product.is_shopify_connected ? syncToShopify : false,
+      };
+
+      const res = await api.patch<Product>(`/products/${product.id}`, payload);
+      setSavedSuccess(true);
+
+      if (res.data?.shopify_sync_result) {
+        setSyncResult(res.data.shopify_sync_result);
+      }
+
+      onSaved();
+    } catch (err: any) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError(err.message || 'Failed to update product');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="card p-6 w-full max-w-xl animate-slide-up my-8 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-surface-700/50">
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Edit2 className="w-5 h-5 text-brand-400" />
+              Edit Product
+            </h2>
+            <p className="text-xs text-surface-400 mt-0.5">
+              Product ID: <span className="font-mono text-surface-300">{product.id}</span>
+            </p>
+          </div>
+          {product.is_shopify_connected ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full">
+              <Store className="w-3.5 h-3.5" />
+              Shopify Linked ({product.external_product_id})
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-surface-800 text-surface-400 border border-surface-700 px-2.5 py-1 rounded-full">
+              Local Product
+            </span>
+          )}
+        </div>
+
+        {/* Sync Result Feedback Banners */}
+        {savedSuccess && (
+          <div className="mb-4 space-y-2">
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-start gap-2 text-emerald-300 text-sm">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+              <div>
+                <span className="font-semibold">Local Save:</span> Product changes saved successfully in Flowmint AI.
+              </div>
+            </div>
+
+            {syncResult && syncResult.status === 'pushed' && (
+              <div className="p-3 bg-brand-500/10 border border-brand-500/30 rounded-lg flex items-start gap-2 text-brand-300 text-sm">
+                <Store className="w-4 h-4 text-brand-400 mt-0.5 shrink-0" />
+                <div>
+                  <span className="font-semibold">Shopify Sync:</span> {syncResult.message}
+                </div>
+              </div>
+            )}
+
+            {syncResult && syncResult.status === 'permission_denied' && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-2 text-amber-300 text-sm">
+                <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                <div>
+                  <span className="font-semibold">Shopify Permission Warning:</span> {syncResult.message}
+                </div>
+              </div>
+            )}
+
+            {syncResult && syncResult.status === 'failed' && (
+              <div className="p-3 bg-danger-500/10 border border-danger-500/30 rounded-lg flex items-start gap-2 text-danger-300 text-sm">
+                <AlertCircle className="w-4 h-4 text-danger-400 mt-0.5 shrink-0" />
+                <div>
+                  <span className="font-semibold">Shopify Sync Failed:</span> {syncResult.message}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-surface-300 mb-1">
+              Product Name <span className="text-danger-400">*</span>
+            </label>
+            <input
+              className="input-field w-full"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              disabled={submitting}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-surface-300 mb-1">
+                SKU <span className="text-danger-400">*</span>
+              </label>
+              <input
+                className="input-field w-full font-mono text-sm"
+                value={sku}
+                onChange={e => setSku(e.target.value)}
+                disabled={submitting}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-300 mb-1">
+                Status
+              </label>
+              <select
+                className="input-field w-full"
+                value={status}
+                onChange={e => setStatus(e.target.value as any)}
+                disabled={submitting}
+              >
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-surface-300 mb-1">
+                Price (₹) <span className="text-danger-400">*</span>
+              </label>
+              <input
+                className="input-field w-full"
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={price}
+                onChange={e => setPrice(e.target.value)}
+                disabled={submitting}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-300 mb-1">
+                Compare-at Price (₹)
+              </label>
+              <input
+                className="input-field w-full"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Optional"
+                value={compareAtPrice}
+                onChange={e => setCompareAtPrice(e.target.value)}
+                disabled={submitting}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-300 mb-1">
+                Stock Quantity
+              </label>
+              <input
+                className="input-field w-full"
+                type="number"
+                min="0"
+                value={stock}
+                onChange={e => setStock(e.target.value)}
+                disabled={submitting}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-surface-300 mb-1">Description</label>
+            <textarea
+              className="input-field w-full"
+              rows={3}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              disabled={submitting}
+              placeholder="Product description..."
+            />
+          </div>
+
+          {/* Shopify Bidirectional Synchronization Option */}
+          {product.is_shopify_connected ? (
+            <div className="p-3.5 bg-surface-800/80 border border-surface-700 rounded-lg space-y-2">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-surface-600 bg-surface-900 text-brand-500 focus:ring-brand-500"
+                  checked={syncToShopify}
+                  onChange={e => setSyncToShopify(e.target.checked)}
+                  disabled={submitting}
+                />
+                <div>
+                  <span className="text-sm font-semibold text-white flex items-center gap-1.5">
+                    <Store className="w-4 h-4 text-brand-400" />
+                    Push changes to connected Shopify store
+                  </span>
+                  <p className="text-xs text-surface-400 mt-0.5">
+                    Uses the Shopify GraphQL Admin API to update product title, price, SKU, status, and inventory in your live Shopify store. Requires <code className="text-surface-300 font-mono">write_products</code> and <code className="text-surface-300 font-mono">write_inventory</code> scopes.
+                  </p>
+                </div>
+              </label>
+            </div>
+          ) : (
+            <div className="p-3 bg-surface-800/40 border border-surface-800 rounded-lg text-xs text-surface-400">
+              <span className="font-semibold text-surface-300">Local-only product:</span> This product was created directly in Flowmint AI. Changes will be saved to your PostgreSQL database only.
+            </div>
+          )}
+
+          {error && (
+            <div className="p-3 bg-danger-500/10 border border-danger-500/30 rounded-lg text-danger-400 text-sm flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="flex gap-3 justify-end pt-2 border-t border-surface-700/50">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={onClose}
+              disabled={submitting}
+            >
+              {savedSuccess ? 'Done' : 'Cancel'}
+            </button>
+            <button
+              type="submit"
+              className="btn-primary flex items-center gap-2"
+              disabled={submitting}
+            >
+              {submitting && <RefreshCw className="w-4 h-4 animate-spin" />}
+              <span>{submitting ? 'Saving...' : (product.is_shopify_connected && syncToShopify ? 'Save & Push to Shopify' : 'Save Changes')}</span>
             </button>
           </div>
         </form>

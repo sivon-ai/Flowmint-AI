@@ -32,6 +32,8 @@ from app.models.customer import Customer
 from app.models.inventory import Inventory
 from app.models.merchant import Merchant
 from app.models.order import Order
+from app.core.encryption import encrypt_credentials
+from app.models.governance import AuditLog
 from app.models.payment import Payment
 from app.models.product import Product
 from app.models.store_connection import StoreConnection, StoreEntityMapping
@@ -844,4 +846,367 @@ async def test_shopify_webhook_disconnected_store_rejected(
         },
     )
     assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_product_local_edit_and_persistence(
+    client: AsyncClient, auth_headers: dict, merchant: Merchant, db_session: AsyncSession
+):
+    """Test editing a local product updates all fields and persists accurately."""
+    # 1. Create a local product
+    create_res = await client.post(
+        "/api/v1/products",
+        headers=auth_headers,
+        json={
+            "name": "Local Keyboard",
+            "sku": "KB-LOCAL-01",
+            "price": 2499.00,
+            "compare_at_price": 2999.00,
+            "description": "Ergonomic mechanical keyboard",
+            "initial_stock": 15,
+            "currency": "INR",
+        },
+    )
+    assert create_res.status_code == 201
+    prod_id = create_res.json()["data"]["id"]
+
+    # 2. Edit product locally
+    patch_res = await client.patch(
+        f"/api/v1/products/{prod_id}",
+        headers=auth_headers,
+        json={
+            "name": "Local Keyboard Pro",
+            "sku": "KB-LOCAL-01-PRO",
+            "price": 2799.00,
+            "compare_at_price": 3299.00,
+            "inventory_quantity": 25,
+            "description": "Pro edition with RGB lighting",
+            "status": "active",
+        },
+    )
+    assert patch_res.status_code == 200
+    patched_data = patch_res.json()["data"]
+    assert patched_data["name"] == "Local Keyboard Pro"
+    assert patched_data["sku"] == "KB-LOCAL-01-PRO"
+    assert float(patched_data["price"]) == 2799.00
+    assert float(patched_data["compare_at_price"]) == 3299.00
+    assert patched_data["inventory"]["available"] == 25
+    assert patched_data["is_shopify_connected"] is False
+    assert patched_data["shopify_sync_result"] is None
+
+    # 3. Verify persistence on GET /api/v1/products/{id}
+    get_res = await client.get(f"/api/v1/products/{prod_id}", headers=auth_headers)
+    assert get_res.status_code == 200
+    get_data = get_res.json()["data"]
+    assert get_data["name"] == "Local Keyboard Pro"
+    assert get_data["sku"] == "KB-LOCAL-01-PRO"
+    assert float(get_data["price"]) == 2799.00
+    assert get_data["inventory"]["available"] == 25
+
+
+@pytest.mark.asyncio
+async def test_shopify_product_edit_push_to_shopify_success(
+    client: AsyncClient, auth_headers: dict, merchant: Merchant, db_session: AsyncSession, monkeypatch
+):
+    """
+    Test editing a Shopify-connected product and pushing updates to Shopify via GraphQL Admin API.
+    Verifies GraphQL mutations, audit trail recording, and persistence.
+    """
+    test_secret = "secret-bidirectional"
+    monkeypatch.setattr(settings, "shopify_client_secret", test_secret)
+
+    # 1. Connected Shopify store with write permissions
+    conn = StoreConnection(
+        merchant_id=merchant.id,
+        provider="shopify",
+        store_url="https://bidi-store.myshopify.com",
+        store_name="bidi-store",
+        external_store_id="bidi-store.myshopify.com",
+        status="connected",
+        scopes="read_products,write_products,read_inventory,write_inventory",
+        encrypted_credentials=encrypt_credentials({"access_token": "shpat_test_token_999", "shop": "bidi-store.myshopify.com"}),
+    )
+    db_session.add(conn)
+    await db_session.commit()
+    await db_session.refresh(conn)
+
+    # 2. Ingest product from Shopify
+    init_payload = {
+        "id": 55112233,
+        "title": "Shopify Headphones",
+        "variants": [{"id": 77112233, "sku": "SHP-HD-01", "price": "3999.00", "inventory_quantity": 20}],
+    }
+    raw_init = json.dumps(init_payload).encode("utf-8")
+    init_res = await client.post(
+        "/api/v1/stores/shopify/webhook",
+        content=raw_init,
+        headers={
+            "X-Shopify-Topic": "products/create",
+            "X-Shopify-Hmac-Sha256": _make_shopify_hmac(raw_init, test_secret),
+            "X-Shopify-Shop-Domain": "bidi-store.myshopify.com",
+            "Content-Type": "application/json",
+        },
+    )
+    assert init_res.status_code == 200
+    internal_id = init_res.json()["data"]["product_id"]
+
+    # 3. Intercept outbound Shopify GraphQL requests
+    orig_post = AsyncClient.post
+
+    async def mock_shopify_post(self, url, **kwargs):
+        url_str = str(url)
+        if "admin/api" in url_str and "graphql.json" in url_str:
+            q = kwargs.get("json", {}).get("query", "")
+            if "getProductAndLocations" in q:
+                return Response(
+                    200,
+                    json={
+                        "data": {
+                            "product": {
+                                "id": "gid://shopify/Product/55112233",
+                                "title": "Shopify Headphones",
+                                "descriptionHtml": "<p>Old desc</p>",
+                                "status": "ACTIVE",
+                                "variants": {
+                                    "nodes": [
+                                        {
+                                            "id": "gid://shopify/ProductVariant/77112233",
+                                            "sku": "SHP-HD-01",
+                                            "price": "3999.00",
+                                            "compareAtPrice": None,
+                                            "inventoryItem": {"id": "gid://shopify/InventoryItem/88112233"},
+                                        }
+                                    ]
+                                },
+                            },
+                            "locations": {
+                                "nodes": [
+                                    {"id": "gid://shopify/Location/99112233", "name": "Primary Warehouse", "isActive": True}
+                                ]
+                            },
+                        }
+                    },
+                )
+            elif "productUpdate" in q:
+                return Response(
+                    200,
+                    json={
+                        "data": {
+                            "productUpdate": {
+                                "product": {"id": "gid://shopify/Product/55112233", "title": "Shopify Headphones Pro", "status": "ACTIVE"},
+                                "userErrors": [],
+                            }
+                        }
+                    },
+                )
+            elif "productVariantsBulkUpdate" in q:
+                return Response(
+                    200,
+                    json={
+                        "data": {
+                            "productVariantsBulkUpdate": {
+                                "productVariants": [
+                                    {"id": "gid://shopify/ProductVariant/77112233", "sku": "SHP-HD-01", "price": "4499.00", "compareAtPrice": "4999.00"}
+                                ],
+                                "userErrors": [],
+                            }
+                        }
+                    },
+                )
+            elif "inventorySetQuantities" in q:
+                return Response(
+                    200,
+                    json={
+                        "data": {
+                            "inventorySetQuantities": {
+                                "inventoryAdjustmentGroup": {"reason": "correction", "changes": []},
+                                "userErrors": [],
+                            }
+                        }
+                    },
+                )
+        return await orig_post(self, url, **kwargs)
+
+    monkeypatch.setattr(AsyncClient, "post", mock_shopify_post)
+
+    # 4. Patch product with sync_to_shopify=True
+    patch_res = await client.patch(
+        f"/api/v1/products/{internal_id}",
+        headers=auth_headers,
+        json={
+            "name": "Shopify Headphones Pro",
+            "price": 4499.00,
+            "compare_at_price": 4999.00,
+            "inventory_quantity": 40,
+            "sync_to_shopify": True,
+        },
+    )
+    assert patch_res.status_code == 200
+    res_data = patch_res.json()["data"]
+    assert res_data["name"] == "Shopify Headphones Pro"
+    assert float(res_data["price"]) == 4499.00
+    assert res_data["inventory"]["available"] == 40
+    assert res_data["is_shopify_connected"] is True
+    assert res_data["shopify_sync_result"] is not None
+    assert res_data["shopify_sync_result"]["success"] is True
+    assert res_data["shopify_sync_result"]["status"] == "pushed"
+
+    # 5. Verify audit log entry was created
+    audit_stmt = select(AuditLog).where(
+        AuditLog.merchant_id == merchant.id,
+        AuditLog.event_type == "product.shopify_synced",
+    )
+    audit = (await db_session.execute(audit_stmt)).scalar_one_or_none()
+    assert audit is not None
+    assert "Shopify Headphones Pro" in audit.reason
+
+
+@pytest.mark.asyncio
+async def test_shopify_product_edit_insufficient_permissions(
+    client: AsyncClient, auth_headers: dict, merchant: Merchant, db_session: AsyncSession, monkeypatch
+):
+    """
+    Test editing a Shopify product when the store connection only has read scopes.
+    The local product update must succeed, but the push must safely fail with 'permission_denied'.
+    """
+    test_secret = "secret-perm"
+    monkeypatch.setattr(settings, "shopify_client_secret", test_secret)
+
+    # Read-only store connection (missing write_products)
+    conn = StoreConnection(
+        merchant_id=merchant.id,
+        provider="shopify",
+        store_url="https://readonly-store.myshopify.com",
+        store_name="readonly-store",
+        external_store_id="readonly-store.myshopify.com",
+        status="connected",
+        scopes="read_products,read_orders,read_inventory,read_customers",
+        encrypted_credentials=encrypt_credentials({"access_token": "shpat_readonly", "shop": "readonly-store.myshopify.com"}),
+    )
+    db_session.add(conn)
+    await db_session.commit()
+
+    # Ingest product
+    payload = {"id": 888111, "title": "Read Only Item", "variants": [{"sku": "RO-01", "price": "100.00"}]}
+    raw_body = json.dumps(payload).encode("utf-8")
+    init_res = await client.post(
+        "/api/v1/stores/shopify/webhook",
+        content=raw_body,
+        headers={
+            "X-Shopify-Topic": "products/create",
+            "X-Shopify-Hmac-Sha256": _make_shopify_hmac(raw_body, test_secret),
+            "X-Shopify-Shop-Domain": "readonly-store.myshopify.com",
+            "Content-Type": "application/json",
+        },
+    )
+    prod_id = init_res.json()["data"]["product_id"]
+
+    # Attempt to push changes to Shopify
+    patch_res = await client.patch(
+        f"/api/v1/products/{prod_id}",
+        headers=auth_headers,
+        json={"name": "Read Only Updated", "sync_to_shopify": True},
+    )
+    assert patch_res.status_code == 200
+    res_data = patch_res.json()["data"]
+
+    # Local update succeeded
+    assert res_data["name"] == "Read Only Updated"
+
+    # Push to Shopify failed with permission_denied
+    assert res_data["shopify_sync_result"]["success"] is False
+    assert res_data["shopify_sync_result"]["status"] == "permission_denied"
+    assert "write_products" in res_data["shopify_sync_result"]["message"]
+
+    # Verify failure recorded in audit log
+    audit_stmt = select(AuditLog).where(
+        AuditLog.merchant_id == merchant.id,
+        AuditLog.event_type == "product.shopify_sync_failed",
+    )
+    audit = (await db_session.execute(audit_stmt)).scalar_one_or_none()
+    assert audit is not None
+
+
+@pytest.mark.asyncio
+async def test_shopify_product_edit_shopify_api_user_error(
+    client: AsyncClient, auth_headers: dict, merchant: Merchant, db_session: AsyncSession, monkeypatch
+):
+    """
+    Test when Shopify GraphQL returns a userError validation message (e.g. invalid title).
+    Local update is committed, but Shopify push reports failure with user error.
+    """
+    test_secret = "secret-usererror"
+    monkeypatch.setattr(settings, "shopify_client_secret", test_secret)
+
+    conn = StoreConnection(
+        merchant_id=merchant.id,
+        provider="shopify",
+        store_url="https://err-store.myshopify.com",
+        store_name="err-store",
+        external_store_id="err-store.myshopify.com",
+        status="connected",
+        scopes="read_products,write_products,read_inventory,write_inventory",
+        encrypted_credentials=encrypt_credentials({"access_token": "shpat_err", "shop": "err-store.myshopify.com"}),
+    )
+    db_session.add(conn)
+    await db_session.commit()
+
+    payload = {"id": 999222, "title": "Err Item", "variants": [{"sku": "ERR-01", "price": "50.00"}]}
+    raw_body = json.dumps(payload).encode("utf-8")
+    init_res = await client.post(
+        "/api/v1/stores/shopify/webhook",
+        content=raw_body,
+        headers={
+            "X-Shopify-Topic": "products/create",
+            "X-Shopify-Hmac-Sha256": _make_shopify_hmac(raw_body, test_secret),
+            "X-Shopify-Shop-Domain": "err-store.myshopify.com",
+            "Content-Type": "application/json",
+        },
+    )
+    prod_id = init_res.json()["data"]["product_id"]
+
+    orig_post = AsyncClient.post
+
+    async def mock_err_post(self, url, **kwargs):
+        url_str = str(url)
+        if "admin/api" in url_str and "graphql.json" in url_str:
+            q = kwargs.get("json", {}).get("query", "")
+            if "getProductAndLocations" in q:
+                return Response(
+                    200,
+                    json={
+                        "data": {
+                            "product": {"id": "gid://shopify/Product/999222", "title": "Err Item", "variants": {"nodes": []}},
+                            "locations": {"nodes": []},
+                        }
+                    },
+                )
+            elif "productUpdate" in q:
+                return Response(
+                    200,
+                    json={
+                        "data": {
+                            "productUpdate": {
+                                "product": None,
+                                "userErrors": [{"field": ["title"], "message": "Title cannot contain special characters"}],
+                            }
+                        }
+                    },
+                )
+        return await orig_post(self, url, **kwargs)
+
+    monkeypatch.setattr(AsyncClient, "post", mock_err_post)
+
+    patch_res = await client.patch(
+        f"/api/v1/products/{prod_id}",
+        headers=auth_headers,
+        json={"name": "Special @@ Item", "sync_to_shopify": True},
+    )
+    assert patch_res.status_code == 200
+    res_data = patch_res.json()["data"]
+    assert res_data["name"] == "Special @@ Item"
+    assert res_data["shopify_sync_result"]["success"] is False
+    assert res_data["shopify_sync_result"]["status"] == "failed"
+    assert "Title cannot contain special characters" in str(res_data["shopify_sync_result"]["errors"])
+
 

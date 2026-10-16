@@ -1,5 +1,26 @@
 /** Flowmint AI TypeScript types — mirrors backend Pydantic schemas */
 
+export interface ShopifySyncResult {
+  success: boolean;
+  status: 'pushed' | 'skipped_local_product' | 'permission_denied' | 'failed' | 'conflict';
+  message: string;
+  external_product_id?: string | null;
+  errors?: string[];
+  reconciled?: boolean;
+}
+
+export interface ProductUpdateRequest {
+  name?: string;
+  sku?: string;
+  description?: string;
+  price?: number;
+  compare_at_price?: number | null;
+  inventory_quantity?: number;
+  status?: 'active' | 'draft' | 'archived';
+  image_url?: string;
+  sync_to_shopify?: boolean;
+}
+
 export interface Product {
   id: string;
   merchant_id: string;
@@ -17,6 +38,9 @@ export interface Product {
   inventory: InventoryInfo | null;
   created_at: string;
   updated_at: string;
+  is_shopify_connected?: boolean;
+  external_product_id?: string | null;
+  shopify_sync_result?: ShopifySyncResult | null;
 }
 
 export interface ProductAttribute {

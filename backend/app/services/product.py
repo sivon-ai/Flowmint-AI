@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import Select, func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +24,7 @@ from app.events.types import EventType
 from app.models.inventory import Inventory
 from app.models.outbox import OutboxEvent
 from app.models.product import Product, ProductAttribute
+from app.models.store_connection import StoreEntityMapping
 from app.schemas.product import (
     ProductCreateRequest,
     ProductResponse,
@@ -133,10 +136,26 @@ class ProductService:
         product = result.scalar_one_or_none()
         if not product:
             raise NotFoundError("Product", str(product_id))
-        return ProductResponse.model_validate(product)
+
+        mapping = (await self.db.execute(
+            select(StoreEntityMapping).where(
+                StoreEntityMapping.merchant_id == merchant_id,
+                StoreEntityMapping.entity_type == "product",
+                StoreEntityMapping.internal_id == product.id,
+            )
+        )).scalar_one_or_none()
+
+        resp = ProductResponse.model_validate(product)
+        resp.is_shopify_connected = mapping is not None
+        resp.external_product_id = mapping.external_id if mapping else None
+        return resp
 
     async def update(
-        self, merchant_id: uuid.UUID, product_id: uuid.UUID, data: ProductUpdateRequest
+        self,
+        merchant_id: uuid.UUID,
+        product_id: uuid.UUID,
+        data: ProductUpdateRequest,
+        user_id: uuid.UUID | None = None,
     ) -> ProductResponse:
         """Update a product, scoped to merchant."""
         result = await self.db.execute(
@@ -149,11 +168,58 @@ class ProductService:
             raise NotFoundError("Product", str(product_id))
 
         update_data = data.model_dump(exclude_unset=True)
+        sync_to_shopify = update_data.pop("sync_to_shopify", False)
 
-        # Handle attributes separately
+        changed_fields: dict[str, Any] = {}
+
+        # 1. Name
+        if "name" in update_data and update_data["name"] != product.name:
+            product.name = update_data["name"]
+            changed_fields["name"] = product.name
+
+        # 2. SKU with tenant uniqueness validation
+        if "sku" in update_data and update_data["sku"] != product.sku:
+            new_sku = update_data["sku"]
+            sku_check = await self.db.execute(
+                select(Product.id).where(
+                    Product.merchant_id == merchant_id,
+                    Product.sku == new_sku,
+                    Product.id != product.id,
+                )
+            )
+            if sku_check.scalar_one_or_none():
+                raise ConflictError(f"A product with SKU '{new_sku}' already exists in your catalog.")
+            product.sku = new_sku
+            changed_fields["sku"] = product.sku
+
+        # 3. Price & Compare at price
+        if "price" in update_data and update_data["price"] != product.price:
+            product.price = update_data["price"]
+            changed_fields["price"] = product.price
+
+        if "compare_at_price" in update_data and update_data["compare_at_price"] != product.compare_at_price:
+            product.compare_at_price = update_data["compare_at_price"]
+            changed_fields["compare_at_price"] = product.compare_at_price
+
+        # 4. Description
+        if "description" in update_data and update_data["description"] != product.description:
+            product.description = update_data["description"]
+            changed_fields["description"] = product.description
+
+        # 5. Status
+        if "status" in update_data and update_data["status"] != product.status:
+            product.status = update_data["status"]
+            changed_fields["status"] = product.status
+
+        # 6. Category & Image
+        if "category_id" in update_data:
+            product.category_id = update_data["category_id"]
+        if "image_url" in update_data:
+            product.image_url = update_data["image_url"]
+
+        # 7. Attributes
         if "attributes" in update_data:
             attrs = update_data.pop("attributes")
-            # Delete existing attributes and replace
             for existing_attr in list(product.attributes):
                 await self.db.delete(existing_attr)
             for attr in attrs:
@@ -163,19 +229,62 @@ class ProductService:
                     value=attr["value"],
                 ))
 
-        for field, value in update_data.items():
-            setattr(product, field, value)
+        # 8. Inventory Quantity
+        if "inventory_quantity" in update_data and update_data["inventory_quantity"] is not None:
+            new_qty = max(0, int(update_data["inventory_quantity"]))
+            if product.inventory:
+                if product.inventory.quantity != new_qty:
+                    product.inventory.quantity = new_qty
+                    changed_fields["inventory_quantity"] = new_qty
+            else:
+                inv = Inventory(
+                    product_id=product.id,
+                    merchant_id=merchant_id,
+                    quantity=new_qty,
+                    reserved=0,
+                )
+                self.db.add(inv)
+                product.inventory = inv
+                changed_fields["inventory_quantity"] = new_qty
+
+        product.updated_at = datetime.now(timezone.utc)
 
         self.db.add(OutboxEvent(
             event_type=EventType.PRODUCT_UPDATED,
             aggregate_type="product",
             aggregate_id=str(product.id),
-            payload={"merchant_id": str(merchant_id), "fields_updated": list(update_data.keys())},
+            payload={"merchant_id": str(merchant_id), "fields_updated": list(changed_fields.keys())},
         ))
 
         await self.db.commit()
         await self.db.refresh(product)
-        return ProductResponse.model_validate(product)
+
+        # Check Shopify connection mapping
+        stmt = select(StoreEntityMapping).where(
+            StoreEntityMapping.merchant_id == merchant_id,
+            StoreEntityMapping.entity_type == "product",
+            StoreEntityMapping.internal_id == product.id,
+        )
+        mapping = (await self.db.execute(stmt)).scalar_one_or_none()
+        is_shopify_connected = mapping is not None
+        external_id = mapping.external_id if mapping else None
+
+        shopify_sync_result = None
+        if sync_to_shopify and changed_fields:
+            from app.services.store_sync import StoreSyncService
+            sync_service = StoreSyncService(self.db)
+            shopify_sync_result = await sync_service.push_product_to_shopify(
+                merchant_id=merchant_id,
+                product=product,
+                changed_fields=changed_fields,
+                user_id=user_id,
+            )
+
+        resp = ProductResponse.model_validate(product)
+        resp.is_shopify_connected = is_shopify_connected
+        resp.external_product_id = external_id
+        resp.shopify_sync_result = shopify_sync_result
+        return resp
 
     async def delete(self, merchant_id: uuid.UUID, product_id: uuid.UUID) -> None:
         """Soft-delete a product by setting status to archived."""
@@ -242,8 +351,29 @@ class ProductService:
         result = await self.db.execute(query)
         products = result.scalars().all()
 
+        # Batch load store entity mappings for Shopify indicator
+        product_ids = [p.id for p in products]
+        mapping_dict: dict[uuid.UUID, str] = {}
+        if product_ids and merchant_id:
+            mappings = (await self.db.execute(
+                select(StoreEntityMapping).where(
+                    StoreEntityMapping.merchant_id == merchant_id,
+                    StoreEntityMapping.entity_type == "product",
+                    StoreEntityMapping.internal_id.in_(product_ids),
+                )
+            )).scalars().all()
+            for m in mappings:
+                mapping_dict[m.internal_id] = m.external_id
+
+        resps = []
+        for p in products:
+            r = ProductResponse.model_validate(p)
+            r.is_shopify_connected = p.id in mapping_dict
+            r.external_product_id = mapping_dict.get(p.id)
+            resps.append(r)
+
         meta = PaginationMeta.from_params(pagination, total)
-        return [ProductResponse.model_validate(p) for p in products], meta
+        return resps, meta
 
     async def search_public(
         self,

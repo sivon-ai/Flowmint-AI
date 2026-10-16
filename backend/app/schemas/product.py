@@ -28,15 +28,27 @@ class ProductCreateRequest(BaseModel):
     initial_stock: int = Field(default=0, ge=0)
 
 
+class ShopifySyncResult(BaseModel):
+    success: bool
+    status: str  # "pushed", "skipped_local_product", "permission_denied", "failed", "conflict"
+    message: str
+    external_product_id: str | None = None
+    errors: list[str] = Field(default_factory=list)
+    reconciled: bool = False
+
+
 class ProductUpdateRequest(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=500)
+    sku: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = None
     price: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=2)
     compare_at_price: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=2)
+    inventory_quantity: int | None = Field(None, ge=0)
     category_id: uuid.UUID | None = None
     status: str | None = Field(None, pattern=r"^(active|draft|archived)$")
     image_url: str | None = None
     attributes: list[ProductAttributeSchema] | None = None
+    sync_to_shopify: bool = False
 
 
 class InventoryInfo(BaseModel):
@@ -66,6 +78,9 @@ class ProductResponse(BaseModel):
     inventory: InventoryInfo | None
     created_at: datetime
     updated_at: datetime
+    is_shopify_connected: bool = False
+    external_product_id: str | None = None
+    shopify_sync_result: ShopifySyncResult | None = None
 
     model_config = {"from_attributes": True}
 

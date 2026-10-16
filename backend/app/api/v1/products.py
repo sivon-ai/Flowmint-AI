@@ -160,7 +160,7 @@ async def update_product(
     db: AsyncSession = Depends(get_db),
 ):
     service = ProductService(db)
-    product = await service.update(user.merchant_id, product_id, data)
+    product = await service.update(user.merchant_id, product_id, data, user_id=user.user_id)
     return ApiResponse.ok(product)
 
 
