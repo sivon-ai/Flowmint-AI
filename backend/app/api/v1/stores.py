@@ -35,7 +35,7 @@ from app.schemas.store import (
     StoreSyncStatusResponse,
     WooCommerceConnectRequest,
 )
-from app.services.store_sync import StoreSyncService
+from app.services.store_sync import StoreSyncService, verify_shopify_webhook_signature
 
 router = APIRouter(prefix="/stores", tags=["Stores & Onboarding"])
 settings = get_settings()
@@ -77,6 +77,19 @@ async def sync_store(
     service = StoreSyncService(db)
     result = await service.trigger_sync(user.merchant_id, connection_id)
     return ApiResponse.ok(result)
+
+
+@router.post("/{connection_id}/reconcile", response_model=ApiResponse[StoreSyncStatusResponse])
+async def reconcile_store(
+    connection_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lightweight delta synchronization to reconcile products modified since last sync."""
+    service = StoreSyncService(db)
+    result = await service.trigger_sync(user.merchant_id, connection_id, delta_only=True)
+    return ApiResponse.ok(result)
+
 
 
 @router.post("/{connection_id}/disconnect", response_model=ApiResponse[StoreConnectionResponse])
@@ -140,6 +153,51 @@ async def shopify_callback(
             url=f"{settings.frontend_url}/onboarding/connect-store?status=error&message={logger_error}",
             status_code=302,
         )
+
+
+@router.post("/shopify/webhook")
+async def shopify_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Public webhook receiver for Shopify product and app lifecycle events.
+    Verifies HMAC-SHA256 signature against exact raw request body.
+    Deduplicates events and synchronizes updated product data immediately (< 5s).
+    """
+    raw_body = await request.body()
+    hmac_header = request.headers.get("X-Shopify-Hmac-Sha256", "")
+    topic = request.headers.get("X-Shopify-Topic", "")
+    shop_domain = request.headers.get("X-Shopify-Shop-Domain", "")
+    webhook_id = request.headers.get("X-Shopify-Webhook-Id", "")
+
+    # 1. Signature Verification
+    if not settings.shopify_client_secret:
+        raise AuthenticationError("Shopify webhook signature verification secret is not configured on server")
+
+    if not verify_shopify_webhook_signature(raw_body, hmac_header, settings.shopify_client_secret):
+        raise AuthenticationError("Invalid Shopify webhook signature")
+
+    if not shop_domain:
+        raise ValidationError("Missing X-Shopify-Shop-Domain header in webhook request")
+
+    # 2. Parse JSON payload
+    import json
+    try:
+        payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+    except Exception:
+        raise ValidationError("Invalid JSON payload in Shopify webhook")
+
+    # 3. Process event idempotently
+    service = StoreSyncService(db)
+    result = await service.process_shopify_webhook(
+        shop_domain=shop_domain,
+        topic=topic,
+        webhook_id=webhook_id,
+        payload=payload,
+    )
+    return {"success": True, "data": result}
+
 
 
 # ==========================================

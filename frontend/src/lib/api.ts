@@ -150,7 +150,9 @@ export const storeApi = {
   syncCustomStore: (apiKey: string, payload: any) =>
     api.post<any>('/stores/custom/sync', payload, { 'X-Store-API-Key': apiKey }),
   triggerSync: (connectionId: string) =>
-    api.post<{ sync_job_id: string; status: string; message: string }>(`/stores/${connectionId}/sync`),
+    api.post<StoreSyncStatus>(`/stores/${connectionId}/sync`),
+  reconcile: (connectionId: string) =>
+    api.post<StoreSyncStatus>(`/stores/${connectionId}/reconcile`),
   disconnect: (connectionId: string) =>
     api.post<{ success: boolean; message: string }>(`/stores/${connectionId}/disconnect`),
 };

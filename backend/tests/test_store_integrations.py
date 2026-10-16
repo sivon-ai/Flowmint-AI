@@ -14,8 +14,10 @@ Validates:
 10. Store disconnection without deleting historical records.
 """
 
+import base64
 import hashlib
 import hmac
+import json
 import uuid
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
@@ -28,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.models.customer import Customer
 from app.models.inventory import Inventory
+from app.models.merchant import Merchant
 from app.models.order import Order
 from app.models.payment import Payment
 from app.models.product import Product
@@ -551,3 +554,294 @@ async def test_store_disconnect_preserves_historical_records(
     p = (await db_session.execute(stmt)).scalar_one_or_none()
     assert p is not None
     assert p.name == "Historical Product"
+
+
+# ==========================================
+# 8. SHOPIFY PRODUCT UPDATE SYNCHRONIZATION BUG & RESOLUTION
+# ==========================================
+
+def _make_shopify_hmac(body: bytes, secret: str) -> str:
+    digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).digest()
+    return base64.b64encode(digest).decode("utf-8")
+
+
+@pytest.mark.asyncio
+async def test_shopify_product_update_bug_reproduction_and_resolution(
+    client: AsyncClient, auth_headers: dict, merchant: Merchant, db_session: AsyncSession, monkeypatch
+):
+    """
+    Exact scenario requested by the user:
+    1. A Shopify product initially has the name 'FM-TEST-001' with SKU 'FM-TEST-001'.
+    2. Flowmint imports and stores that product.
+    3. The product name is changed to 'FM-TEST' in Shopify, keeping SKU 'FM-TEST-001'.
+    4. Shopify sends a verified update event (products/update).
+    5. The existing Flowmint database record is updated in place.
+    6. Flowmint still has exactly ONE corresponding imported product (no duplicates!).
+    7. The Products API returns the new name 'FM-TEST'.
+    """
+    test_secret = "test-shopify-secret-webhook-987"
+    monkeypatch.setattr(settings, "shopify_client_secret", test_secret)
+
+    # 1. Create active Shopify connection for this merchant
+    conn = StoreConnection(
+        merchant_id=merchant.id,
+        provider="shopify",
+        store_url="https://flowmint-test-store.myshopify.com",
+        store_name="flowmint-test-store",
+        external_store_id="flowmint-test-store.myshopify.com",
+        status="connected",
+        encrypted_credentials="dummy_encrypted_creds",
+    )
+    db_session.add(conn)
+    await db_session.commit()
+    await db_session.refresh(conn)
+
+    # 2. Initial product created in Shopify: name 'FM-TEST-001', SKU 'FM-TEST-001'
+    initial_payload = {
+        "id": 881234567,
+        "title": "FM-TEST-001",
+        "body_html": "<p>Initial description</p>",
+        "status": "active",
+        "variants": [
+            {
+                "id": 991234567,
+                "sku": "FM-TEST-001",
+                "price": "1499.00",
+                "compare_at_price": "1999.00",
+                "inventory_quantity": 25,
+            }
+        ],
+    }
+    raw_initial = json.dumps(initial_payload).encode("utf-8")
+    hmac_initial = _make_shopify_hmac(raw_initial, test_secret)
+
+    init_res = await client.post(
+        "/api/v1/stores/shopify/webhook",
+        content=raw_initial,
+        headers={
+            "X-Shopify-Topic": "products/create",
+            "X-Shopify-Hmac-Sha256": hmac_initial,
+            "X-Shopify-Shop-Domain": "flowmint-test-store.myshopify.com",
+            "X-Shopify-Webhook-Id": str(uuid.uuid4()),
+            "Content-Type": "application/json",
+        },
+    )
+    assert init_res.status_code == 200
+
+    # Verify product initially exists in Products API with old name
+    get_res1 = await client.get("/api/v1/products", headers=auth_headers)
+    assert get_res1.status_code == 200
+    prods1 = get_res1.json()["data"]
+    assert len(prods1) == 1
+    assert prods1[0]["name"] == "FM-TEST-001"
+    assert prods1[0]["sku"] == "FM-TEST-001"
+    assert float(prods1[0]["price"]) == 1499.00
+    assert prods1[0]["inventory"]["available"] == 25
+
+    # 3. Product name is changed in Shopify from 'FM-TEST-001' to 'FM-TEST' (keeping SKU 'FM-TEST-001')
+    update_payload = {
+        "id": 881234567,
+        "title": "FM-TEST",
+        "body_html": "<p>Updated description for FM-TEST</p>",
+        "status": "active",
+        "variants": [
+            {
+                "id": 991234567,
+                "sku": "FM-TEST-001",
+                "price": "1599.00",
+                "compare_at_price": "1999.00",
+                "inventory_quantity": 30,
+            }
+        ],
+    }
+    raw_update = json.dumps(update_payload).encode("utf-8")
+    hmac_update = _make_shopify_hmac(raw_update, test_secret)
+
+    # 4. Shopify sends verified products/update webhook
+    upd_res = await client.post(
+        "/api/v1/stores/shopify/webhook",
+        content=raw_update,
+        headers={
+            "X-Shopify-Topic": "products/update",
+            "X-Shopify-Hmac-Sha256": hmac_update,
+            "X-Shopify-Shop-Domain": "flowmint-test-store.myshopify.com",
+            "X-Shopify-Webhook-Id": str(uuid.uuid4()),
+            "Content-Type": "application/json",
+        },
+    )
+    assert upd_res.status_code == 200
+    assert upd_res.json()["data"]["name"] == "FM-TEST"
+
+    # 5 & 6. Verify database contains EXACTLY ONE product (no duplicate!) with updated name
+    db_prods = (
+        await db_session.execute(
+            select(Product).where(Product.merchant_id == merchant.id)
+        )
+    ).scalars().all()
+    assert len(db_prods) == 1
+    assert db_prods[0].name == "FM-TEST"
+    assert db_prods[0].sku == "FM-TEST-001"
+    assert db_prods[0].price == Decimal("1599.00")
+
+    # 7. Products API returns the new name 'FM-TEST' immediately on fetch
+    get_res2 = await client.get("/api/v1/products", headers=auth_headers)
+    assert get_res2.status_code == 200
+    prods2 = get_res2.json()["data"]
+    assert len(prods2) == 1
+    assert prods2[0]["name"] == "FM-TEST"
+    assert float(prods2[0]["price"]) == 1599.00
+    assert prods2[0]["inventory"]["available"] == 30
+
+
+@pytest.mark.asyncio
+async def test_shopify_webhook_invalid_signature_rejected(
+    client: AsyncClient, merchant: Merchant, db_session: AsyncSession, monkeypatch
+):
+    monkeypatch.setattr(settings, "shopify_client_secret", "correct-secret")
+    raw_payload = b'{"id": 12345, "title": "Tampered"}'
+
+    # Send with bad signature
+    resp = await client.post(
+        "/api/v1/stores/shopify/webhook",
+        content=raw_payload,
+        headers={
+            "X-Shopify-Topic": "products/update",
+            "X-Shopify-Hmac-Sha256": "bad_invalid_hmac_signature==",
+            "X-Shopify-Shop-Domain": "test-store.myshopify.com",
+            "Content-Type": "application/json",
+        },
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_shopify_webhook_deduplication(
+    client: AsyncClient, merchant: Merchant, db_session: AsyncSession, monkeypatch
+):
+    test_secret = "secret-dedup"
+    monkeypatch.setattr(settings, "shopify_client_secret", test_secret)
+
+    conn = StoreConnection(
+        merchant_id=merchant.id,
+        provider="shopify",
+        store_url="https://dedup-store.myshopify.com",
+        store_name="dedup-store",
+        external_store_id="dedup-store.myshopify.com",
+        status="connected",
+        encrypted_credentials="dummy_encrypted_creds",
+    )
+    db_session.add(conn)
+    await db_session.commit()
+
+    webhook_id = str(uuid.uuid4())
+    payload = {"id": 77777, "title": "Dedup Item", "variants": [{"sku": "DEDUP-01", "price": "100.00"}]}
+    raw_body = json.dumps(payload).encode("utf-8")
+    hmac_val = _make_shopify_hmac(raw_body, test_secret)
+
+    headers = {
+        "X-Shopify-Topic": "products/create",
+        "X-Shopify-Hmac-Sha256": hmac_val,
+        "X-Shopify-Shop-Domain": "dedup-store.myshopify.com",
+        "X-Shopify-Webhook-Id": webhook_id,
+        "Content-Type": "application/json",
+    }
+
+    # First delivery: processed
+    resp1 = await client.post("/api/v1/stores/shopify/webhook", content=raw_body, headers=headers)
+    assert resp1.status_code == 200
+    assert resp1.json()["data"]["status"] == "processed"
+
+    # Second delivery (same webhook_id): duplicate ignored without error
+    resp2 = await client.post("/api/v1/stores/shopify/webhook", content=raw_body, headers=headers)
+    assert resp2.status_code == 200
+    assert resp2.json()["data"]["status"] == "duplicate_ignored"
+
+
+@pytest.mark.asyncio
+async def test_shopify_webhook_product_delete_archives(
+    client: AsyncClient, auth_headers: dict, merchant: Merchant, db_session: AsyncSession, monkeypatch
+):
+    test_secret = "secret-delete"
+    monkeypatch.setattr(settings, "shopify_client_secret", test_secret)
+
+    conn = StoreConnection(
+        merchant_id=merchant.id,
+        provider="shopify",
+        store_url="https://del-store.myshopify.com",
+        store_name="del-store",
+        external_store_id="del-store.myshopify.com",
+        status="connected",
+        encrypted_credentials="dummy_encrypted_creds",
+    )
+    db_session.add(conn)
+    await db_session.commit()
+
+    # Create product via webhook
+    create_payload = {"id": 55555, "title": "To Delete", "variants": [{"sku": "DEL-01", "price": "50.00"}]}
+    raw_create = json.dumps(create_payload).encode("utf-8")
+    await client.post(
+        "/api/v1/stores/shopify/webhook",
+        content=raw_create,
+        headers={
+            "X-Shopify-Topic": "products/create",
+            "X-Shopify-Hmac-Sha256": _make_shopify_hmac(raw_create, test_secret),
+            "X-Shopify-Shop-Domain": "del-store.myshopify.com",
+            "Content-Type": "application/json",
+        },
+    )
+
+    # Now send products/delete
+    delete_payload = {"id": 55555}
+    raw_del = json.dumps(delete_payload).encode("utf-8")
+    del_res = await client.post(
+        "/api/v1/stores/shopify/webhook",
+        content=raw_del,
+        headers={
+            "X-Shopify-Topic": "products/delete",
+            "X-Shopify-Hmac-Sha256": _make_shopify_hmac(raw_del, test_secret),
+            "X-Shopify-Shop-Domain": "del-store.myshopify.com",
+            "Content-Type": "application/json",
+        },
+    )
+    assert del_res.status_code == 200
+    assert del_res.json()["data"]["status"] == "archived"
+
+    # Verify product in database has status == 'archived'
+    p = (await db_session.execute(select(Product).where(Product.sku == "DEL-01"))).scalar_one_or_none()
+    assert p is not None
+    assert p.status == "archived"
+
+
+@pytest.mark.asyncio
+async def test_shopify_webhook_disconnected_store_rejected(
+    client: AsyncClient, merchant: Merchant, db_session: AsyncSession, monkeypatch
+):
+    test_secret = "secret-disc"
+    monkeypatch.setattr(settings, "shopify_client_secret", test_secret)
+
+    conn = StoreConnection(
+        merchant_id=merchant.id,
+        provider="shopify",
+        store_url="https://disc-store.myshopify.com",
+        store_name="disc-store",
+        external_store_id="disc-store.myshopify.com",
+        status="disconnected",
+        encrypted_credentials="dummy_encrypted_creds",
+    )
+    db_session.add(conn)
+    await db_session.commit()
+
+    payload = {"id": 99999, "title": "Disconnected Item"}
+    raw_body = json.dumps(payload).encode("utf-8")
+    res = await client.post(
+        "/api/v1/stores/shopify/webhook",
+        content=raw_body,
+        headers={
+            "X-Shopify-Topic": "products/update",
+            "X-Shopify-Hmac-Sha256": _make_shopify_hmac(raw_body, test_secret),
+            "X-Shopify-Shop-Domain": "disc-store.myshopify.com",
+            "Content-Type": "application/json",
+        },
+    )
+    assert res.status_code == 404
+

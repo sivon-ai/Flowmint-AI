@@ -10,6 +10,7 @@ Handles:
 - Safe disconnect without deleting historical business records.
 """
 
+import base64
 import hmac
 import hashlib
 import logging
@@ -58,6 +59,19 @@ def _slugify(text: str) -> str:
     s = re.sub(r"[\s_]+", "-", s)
     s = re.sub(r"-+", "-", s).strip("-")
     return s or "item"
+
+
+def verify_shopify_webhook_signature(raw_body: bytes, hmac_header: str, secret: str) -> bool:
+    """
+    Verify Shopify webhook HMAC-SHA256 signature against raw request body bytes.
+    Shopify computes HMAC-SHA256 using the client secret and base64-encodes the digest.
+    """
+    if not hmac_header or not secret:
+        return False
+    digest = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
+    computed_hmac = base64.b64encode(digest).decode("utf-8")
+    return hmac.compare_digest(computed_hmac, hmac_header.strip())
+
 
 
 class StoreSyncService:
@@ -495,13 +509,18 @@ class StoreSyncService:
         quantity: int = 0,
         status: str = "active",
         category_name: str | None = None,
+        image_url: str | None = None,
     ) -> Product:
-        # Check mapping
+        clean_external_id = str(external_id).strip()
+        if "gid://shopify/Product/" in clean_external_id:
+            clean_external_id = clean_external_id.split("/")[-1]
+
+        # 1. Check existing external entity mapping
         stmt = select(StoreEntityMapping).where(
             StoreEntityMapping.merchant_id == merchant_id,
             StoreEntityMapping.connection_id == connection_id,
             StoreEntityMapping.entity_type == "product",
-            StoreEntityMapping.external_id == external_id,
+            StoreEntityMapping.external_id == clean_external_id,
         )
         mapping = (await self.db.execute(stmt)).scalar_one_or_none()
 
@@ -515,15 +534,87 @@ class StoreSyncService:
                 product.compare_at_price = compare_at_price
                 product.description = description
                 product.status = status if status in ("active", "draft", "archived") else "active"
+                if currency:
+                    product.currency = currency
+                if image_url:
+                    product.image_url = image_url
 
-                # Update inventory
+                # If SKU is provided and changed, ensure no collision before updating
+                if sku and sku != product.sku:
+                    sku_check = await self.db.execute(
+                        select(Product.id).where(
+                            Product.merchant_id == merchant_id,
+                            Product.sku == sku,
+                            Product.id != product.id,
+                        )
+                    )
+                    if not sku_check.scalar_one_or_none():
+                        product.sku = sku
+
+                product.updated_at = datetime.now(timezone.utc)
+
+                # Update or create inventory
                 inv_stmt = select(Inventory).where(Inventory.product_id == product.id)
                 inv = (await self.db.execute(inv_stmt)).scalar_one_or_none()
                 if inv:
                     inv.quantity = max(0, quantity)
+                else:
+                    self.db.add(
+                        Inventory(
+                            product_id=product.id,
+                            merchant_id=merchant_id,
+                            quantity=max(0, quantity),
+                            reserved=0,
+                        )
+                    )
                 return product
 
-        # Resolve category if provided
+        # 2. Check if a product with the same SKU already exists for this merchant
+        # Links existing unmapped products without creating duplicates
+        if sku:
+            existing_sku_stmt = select(Product).where(
+                Product.merchant_id == merchant_id,
+                Product.sku == sku,
+            )
+            existing_product = (await self.db.execute(existing_sku_stmt)).scalar_one_or_none()
+            if existing_product:
+                existing_product.name = name
+                existing_product.price = price
+                existing_product.compare_at_price = compare_at_price
+                existing_product.description = description
+                existing_product.status = status if status in ("active", "draft", "archived") else "active"
+                if currency:
+                    existing_product.currency = currency
+                if image_url:
+                    existing_product.image_url = image_url
+                existing_product.updated_at = datetime.now(timezone.utc)
+
+                inv_stmt = select(Inventory).where(Inventory.product_id == existing_product.id)
+                inv = (await self.db.execute(inv_stmt)).scalar_one_or_none()
+                if inv:
+                    inv.quantity = max(0, quantity)
+                else:
+                    self.db.add(
+                        Inventory(
+                            product_id=existing_product.id,
+                            merchant_id=merchant_id,
+                            quantity=max(0, quantity),
+                            reserved=0,
+                        )
+                    )
+
+                # Save mapping so future updates match immediately
+                new_mapping = StoreEntityMapping(
+                    merchant_id=merchant_id,
+                    connection_id=connection_id,
+                    entity_type="product",
+                    external_id=clean_external_id,
+                    internal_id=existing_product.id,
+                )
+                self.db.add(new_mapping)
+                return existing_product
+
+        # 3. Resolve category if provided
         category_id = None
         if category_name:
             c_stmt = select(Category).where(
@@ -533,15 +624,15 @@ class StoreSyncService:
             if cat:
                 category_id = cat.id
 
-        # Generate unique SKU if conflicted
-        base_sku = sku or f"EXT-{external_id[:8]}"
+        # 4. Generate unique SKU if conflicted
+        base_sku = sku or f"EXT-{clean_external_id[:8]}"
         sku_check = await self.db.execute(
             select(Product.id).where(Product.merchant_id == merchant_id, Product.sku == base_sku)
         )
         if sku_check.scalar_one_or_none():
             base_sku = f"{base_sku}-{uuid.uuid4().hex[:4]}"
 
-        # Generate unique slug
+        # 5. Generate unique slug
         base_slug = _slugify(name)
         slug_check = await self.db.execute(
             select(Product.id).where(Product.merchant_id == merchant_id, Product.slug == base_slug)
@@ -560,6 +651,7 @@ class StoreSyncService:
             compare_at_price=compare_at_price,
             currency=currency or "INR",
             status=status if status in ("active", "draft", "archived") else "active",
+            image_url=image_url,
         )
         self.db.add(product)
         await self.db.flush()
@@ -578,7 +670,7 @@ class StoreSyncService:
             merchant_id=merchant_id,
             connection_id=connection_id,
             entity_type="product",
-            external_id=external_id,
+            external_id=clean_external_id,
             internal_id=product.id,
         )
         self.db.add(new_mapping)
@@ -741,7 +833,9 @@ class StoreSyncService:
     # 6. PROVIDER API DRIVERS
     # ==========================================
 
-    async def sync_shopify_store(self, connection: StoreConnection) -> StoreSyncStatusResponse:
+    async def sync_shopify_store(
+        self, connection: StoreConnection, delta_only: bool = False
+    ) -> StoreSyncStatusResponse:
         """Fetch real data from Shopify Admin API and idempotently map into Flowmint."""
         creds = decrypt_credentials(connection.encrypted_credentials)
         access_token = creds.get("access_token")
@@ -752,7 +846,7 @@ class StoreSyncService:
             merchant_id=connection.merchant_id,
             connection_id=connection.id,
             status="running",
-            entity_type="all",
+            entity_type="delta" if delta_only else "all",
             started_at=datetime.now(timezone.utc),
         )
         self.db.add(job)
@@ -768,8 +862,16 @@ class StoreSyncService:
 
         async with httpx.AsyncClient(timeout=20.0) as client:
             try:
-                # 1. Sync Products
-                p_res = await client.get(f"{base_url}/products.json?limit=50", headers=headers)
+                # Register webhooks automatically with Shopify if possible
+                await self.register_shopify_webhooks(connection)
+
+                # 1. Sync Products (supports delta sync via updated_at_min)
+                if delta_only and connection.last_sync_at:
+                    p_url = f"{base_url}/products.json?limit=50&updated_at_min={connection.last_sync_at.isoformat()}"
+                else:
+                    p_url = f"{base_url}/products.json?limit=50"
+
+                p_res = await client.get(p_url, headers=headers)
                 if p_res.status_code == 200:
                     for p in p_res.json().get("products", []):
                         variants = p.get("variants", [])
@@ -777,6 +879,7 @@ class StoreSyncService:
                         stock = sum(v.get("inventory_quantity", 0) for v in variants)
                         price = Decimal(str(first_var.get("price", "0.00")))
                         compare_at = Decimal(str(first_var.get("compare_at_price"))) if first_var.get("compare_at_price") else None
+                        img = p.get("image", {}).get("src") if isinstance(p.get("image"), dict) else None
 
                         await self._upsert_product(
                             merchant_id=connection.merchant_id,
@@ -789,55 +892,57 @@ class StoreSyncService:
                             description=p.get("body_html"),
                             quantity=stock,
                             status="active" if p.get("status") == "active" else "draft",
+                            image_url=img,
                         )
                         products_count += 1
 
-                # 2. Sync Customers
-                c_res = await client.get(f"{base_url}/customers.json?limit=50", headers=headers)
-                if c_res.status_code == 200:
-                    for c in c_res.json().get("customers", []):
-                        if c.get("email"):
-                            await self._upsert_customer(
+                # 2. Sync Customers (skip on delta_only)
+                if not delta_only:
+                    c_res = await client.get(f"{base_url}/customers.json?limit=50", headers=headers)
+                    if c_res.status_code == 200:
+                        for c in c_res.json().get("customers", []):
+                            if c.get("email"):
+                                await self._upsert_customer(
+                                    merchant_id=connection.merchant_id,
+                                    connection_id=connection.id,
+                                    external_id=str(c["id"]),
+                                    email=c["email"],
+                                    name=f"{c.get('first_name', '')} {c.get('last_name', '')}".strip() or c["email"],
+                                    phone=c.get("phone"),
+                                )
+                                customers_count += 1
+
+                    # 3. Sync Orders
+                    o_res = await client.get(f"{base_url}/orders.json?status=any&limit=50", headers=headers)
+                    if o_res.status_code == 200:
+                        for o in o_res.json().get("orders", []):
+                            cust = o.get("customer") or {}
+                            c_email = cust.get("email") or o.get("email") or f"customer_{o['id']}@shopify.external"
+                            c_name = f"{cust.get('first_name', '')} {cust.get('last_name', '')}".strip() or "Shopify Customer"
+
+                            items_data = [
+                                {
+                                    "name": itm.get("title", "Shopify Item"),
+                                    "sku": itm.get("sku") or f"ITM-{itm['id']}",
+                                    "quantity": itm.get("quantity", 1),
+                                    "price": itm.get("price", "0.00"),
+                                }
+                                for itm in o.get("line_items", [])
+                            ]
+
+                            await self._upsert_order(
                                 merchant_id=connection.merchant_id,
                                 connection_id=connection.id,
-                                external_id=str(c["id"]),
-                                email=c["email"],
-                                name=f"{c.get('first_name', '')} {c.get('last_name', '')}".strip() or c["email"],
-                                phone=c.get("phone"),
+                                external_id=str(o["id"]),
+                                order_number=o.get("name") or str(o.get("order_number") or o["id"]),
+                                customer_email=c_email,
+                                customer_name=c_name,
+                                total=Decimal(str(o.get("total_price", "0.00"))),
+                                currency=o.get("currency", "INR"),
+                                status="completed" if o.get("financial_status") == "paid" else "pending",
+                                items_data=items_data,
                             )
-                            customers_count += 1
-
-                # 3. Sync Orders
-                o_res = await client.get(f"{base_url}/orders.json?status=any&limit=50", headers=headers)
-                if o_res.status_code == 200:
-                    for o in o_res.json().get("orders", []):
-                        cust = o.get("customer") or {}
-                        c_email = cust.get("email") or o.get("email") or f"customer_{o['id']}@shopify.external"
-                        c_name = f"{cust.get('first_name', '')} {cust.get('last_name', '')}".strip() or "Shopify Customer"
-
-                        items_data = [
-                            {
-                                "name": itm.get("title", "Shopify Item"),
-                                "sku": itm.get("sku") or f"ITM-{itm['id']}",
-                                "quantity": itm.get("quantity", 1),
-                                "price": itm.get("price", "0.00"),
-                            }
-                            for itm in o.get("line_items", [])
-                        ]
-
-                        await self._upsert_order(
-                            merchant_id=connection.merchant_id,
-                            connection_id=connection.id,
-                            external_id=str(o["id"]),
-                            order_number=o.get("name") or str(o.get("order_number") or o["id"]),
-                            customer_email=c_email,
-                            customer_name=c_name,
-                            total=Decimal(str(o.get("total_price", "0.00"))),
-                            currency=o.get("currency", "INR"),
-                            status="completed" if o.get("financial_status") == "paid" else "pending",
-                            items_data=items_data,
-                        )
-                        orders_count += 1
+                            orders_count += 1
 
                 # Finalize job
                 job.status = "completed"
@@ -849,7 +954,7 @@ class StoreSyncService:
                     "orders": orders_count,
                 }
 
-                connection.sync_status = "completed"
+                connection.sync_status = "synced"
                 connection.last_sync_at = datetime.now(timezone.utc)
                 connection.sync_summary = job.summary_json
                 connection.last_error = None
@@ -873,6 +978,188 @@ class StoreSyncService:
             records_failed=job.records_failed,
             last_error=connection.last_error,
         )
+
+    async def register_shopify_webhooks(self, connection: StoreConnection):
+        """Register product and app lifecycle webhooks with Shopify Admin API."""
+        try:
+            creds = decrypt_credentials(connection.encrypted_credentials)
+            access_token = creds.get("access_token")
+            shop = creds.get("shop")
+            if not access_token or not shop:
+                return
+
+            webhook_base = settings.backend_public_url.rstrip("/")
+            webhook_url = f"{webhook_base}/api/v1/stores/shopify/webhook"
+
+            topics = ["products/update", "products/create", "products/delete", "app/uninstalled"]
+            api_version = settings.shopify_api_version or "2024-01"
+            endpoint = f"https://{shop}/admin/api/{api_version}/webhooks.json"
+            headers = {
+                "X-Shopify-Access-Token": access_token,
+                "Content-Type": "application/json",
+            }
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                for topic in topics:
+                    try:
+                        resp = await client.post(
+                            endpoint,
+                            headers=headers,
+                            json={
+                                "webhook": {
+                                    "topic": topic,
+                                    "address": webhook_url,
+                                    "format": "json",
+                                }
+                            },
+                        )
+                        if resp.status_code in (201, 200):
+                            logger.info("Registered Shopify webhook %s for %s", topic, shop)
+                        elif resp.status_code == 422:
+                            logger.debug("Shopify webhook %s already registered for %s", topic, shop)
+                        else:
+                            logger.warning(
+                                "Shopify webhook registration for %s returned %s: %s",
+                                topic,
+                                resp.status_code,
+                                resp.text,
+                            )
+                    except Exception as err:
+                        logger.warning("Failed to register webhook %s: %s", topic, str(err))
+        except Exception as e:
+            logger.warning("Error during register_shopify_webhooks: %s", str(e))
+
+    async def process_shopify_webhook(
+        self,
+        shop_domain: str,
+        topic: str,
+        webhook_id: str | None,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Process verified Shopify webhook event idempotently.
+        Supports:
+        - products/update, products/create
+        - products/delete
+        - app/uninstalled
+        """
+        raw_shop = shop_domain.strip().lower()
+        if not raw_shop.endswith(".myshopify.com") and "." not in raw_shop:
+            raw_shop_candidate = f"{raw_shop}.myshopify.com"
+        else:
+            raw_shop_candidate = raw_shop
+
+        # Query active connection for shop_domain
+        stmt = select(StoreConnection).where(
+            StoreConnection.provider == "shopify",
+            (StoreConnection.external_store_id == raw_shop)
+            | (StoreConnection.external_store_id == raw_shop_candidate)
+            | (StoreConnection.store_url.ilike(f"%{raw_shop}%")),
+            StoreConnection.status.in_(["connected", "synced", "syncing"]),
+        )
+        conn = (await self.db.execute(stmt)).scalar_one_or_none()
+        if not conn:
+            logger.warning("No active Shopify connection found for domain: %s", raw_shop)
+            raise NotFoundError("StoreConnection for Shopify domain", raw_shop)
+
+        # Deduplicate using webhook_id
+        if webhook_id:
+            dup_stmt = select(StoreSyncJob.id).where(
+                StoreSyncJob.connection_id == conn.id,
+                StoreSyncJob.entity_type == f"webhook:{webhook_id}",
+            )
+            if (await self.db.execute(dup_stmt)).scalar_one_or_none():
+                logger.info("Shopify webhook %s already processed; skipping duplicate.", webhook_id)
+                return {"status": "duplicate_ignored", "webhook_id": webhook_id, "topic": topic}
+
+        # Create record of sync job for audit and deduplication
+        job = StoreSyncJob(
+            merchant_id=conn.merchant_id,
+            connection_id=conn.id,
+            status="completed",
+            entity_type=f"webhook:{webhook_id}" if webhook_id else "webhook:event",
+            records_processed=1,
+            records_failed=0,
+            started_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+            summary_json={"topic": topic, "webhook_id": webhook_id},
+        )
+        self.db.add(job)
+
+        if topic in ("products/update", "products/create"):
+            p_id = str(payload.get("id"))
+            variants = payload.get("variants", [])
+            first_var = variants[0] if variants else {}
+            stock = sum(v.get("inventory_quantity", 0) for v in variants)
+            price = Decimal(str(first_var.get("price", "0.00")))
+            compare_at = Decimal(str(first_var.get("compare_at_price"))) if first_var.get("compare_at_price") else None
+            sku = first_var.get("sku") or f"SHPFY-{p_id}"
+            img = payload.get("image", {}).get("src") if isinstance(payload.get("image"), dict) else None
+
+            product = await self._upsert_product(
+                merchant_id=conn.merchant_id,
+                connection_id=conn.id,
+                external_id=p_id,
+                name=payload.get("title", "Shopify Product"),
+                sku=sku,
+                price=price,
+                compare_at_price=compare_at,
+                description=payload.get("body_html"),
+                quantity=stock,
+                status="active" if payload.get("status") == "active" else "draft",
+                image_url=img,
+            )
+
+            conn.last_sync_at = datetime.now(timezone.utc)
+            conn.sync_status = "synced"
+            conn.last_error = None
+            if conn.sync_summary is None:
+                conn.sync_summary = {}
+            conn.sync_summary["last_event"] = f"{topic}:{p_id}"
+
+            await self.db.commit()
+            logger.info("Successfully processed Shopify %s for product %s (%s)", topic, p_id, product.name)
+            return {
+                "status": "processed",
+                "topic": topic,
+                "product_id": str(product.id),
+                "external_id": p_id,
+                "name": product.name,
+                "sku": product.sku,
+            }
+
+        elif topic == "products/delete":
+            p_id = str(payload.get("id"))
+            # Soft-archive product
+            m_stmt = select(StoreEntityMapping).where(
+                StoreEntityMapping.merchant_id == conn.merchant_id,
+                StoreEntityMapping.connection_id == conn.id,
+                StoreEntityMapping.entity_type == "product",
+                StoreEntityMapping.external_id == p_id,
+            )
+            mapping = (await self.db.execute(m_stmt)).scalar_one_or_none()
+            if mapping:
+                p_stmt = select(Product).where(Product.id == mapping.internal_id)
+                product = (await self.db.execute(p_stmt)).scalar_one_or_none()
+                if product:
+                    product.status = "archived"
+                    product.updated_at = datetime.now(timezone.utc)
+
+            conn.last_sync_at = datetime.now(timezone.utc)
+            conn.sync_status = "synced"
+            await self.db.commit()
+            return {"status": "archived", "topic": topic, "external_id": p_id}
+
+        elif topic == "app/uninstalled":
+            conn.status = "disconnected"
+            conn.disconnected_at = datetime.now(timezone.utc)
+            await self.db.commit()
+            return {"status": "disconnected", "topic": topic}
+
+        else:
+            conn.last_sync_at = datetime.now(timezone.utc)
+            await self.db.commit()
+            return {"status": "ignored", "topic": topic}
 
     async def sync_woocommerce_store(self, connection: StoreConnection) -> StoreSyncStatusResponse:
         """Fetch real data from WooCommerce REST API and idempotently map into Flowmint."""
@@ -1044,23 +1331,28 @@ class StoreSyncService:
         await self.db.refresh(conn)
         return StoreConnectionResponse.model_validate(conn)
 
-    async def trigger_sync(self, merchant_id: uuid.UUID, connection_id: uuid.UUID) -> StoreSyncStatusResponse:
+    async def trigger_sync(
+        self, merchant_id: uuid.UUID, connection_id: uuid.UUID, delta_only: bool = False
+    ) -> StoreSyncStatusResponse:
         conn = await self.get_connection(merchant_id, connection_id)
         if conn.status == "disconnected":
             raise ValidationError("Cannot synchronize a disconnected store.")
 
+        if conn.sync_status == "running":
+            raise ConflictError("A synchronization job is already running for this store.")
+
         if conn.provider == "shopify":
-            return await self.sync_shopify_store(conn)
+            return await self.sync_shopify_store(conn, delta_only=delta_only)
         elif conn.provider == "woocommerce":
             return await self.sync_woocommerce_store(conn)
         else:
             # Custom store
             conn.last_sync_at = datetime.now(timezone.utc)
-            conn.sync_status = "completed"
+            conn.sync_status = "synced"
             await self.db.commit()
             return StoreSyncStatusResponse(
                 connection_id=conn.id,
-                sync_status="completed",
+                sync_status="synced",
                 last_sync_at=conn.last_sync_at,
                 sync_summary=conn.sync_summary or {},
                 records_processed=0,

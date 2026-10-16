@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { api, ApiError } from '../../lib/api';
-import type { Product } from '../../types';
-import { Plus, Search, Package, Edit2, Trash2, Upload } from 'lucide-react';
+import type { Product, StoreConnection, StoreSyncStatus } from '../../types';
+import { Plus, Search, Package, Edit2, Trash2, Upload, RefreshCw, Store, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import ProductImportModal from '../../components/merchant/ProductImportModal';
 
 export default function ProductsPage() {
@@ -11,20 +11,130 @@ export default function ProductsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
-  const loadProducts = async () => {
+  // Store integration & auto-sync state
+  const [storeConnection, setStoreConnection] = useState<StoreConnection | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadProducts = useCallback(async () => {
     setLoading(true);
     try {
       const q = search ? `&q=${encodeURIComponent(search)}` : '';
       const res = await api.get<Product[]>(`/products?per_page=50${q}`);
       setProducts(res.data || []);
-    } catch (e) { console.error(e); }
-    setLoading(false);
-  };
+    } catch (e) {
+      console.error('Failed to load products', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
 
-  useEffect(() => { loadProducts(); }, [search]);
+  const loadStoreConnection = useCallback(async () => {
+    try {
+      const res = await api.get<StoreConnection[]>('/stores');
+      const active = (res.data || []).find(c => ['connected', 'synced', 'syncing'].includes(c.status));
+      if (active) {
+        setStoreConnection(active);
+        if (active.sync_status === 'running') {
+          setIsSyncing(true);
+        }
+      } else {
+        setStoreConnection(null);
+      }
+    } catch (e) {
+      console.error('Failed to load store connection', e);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadProducts();
+    loadStoreConnection();
+  }, [loadProducts, loadStoreConnection]);
+
+  // Refetch when browser window gains focus (e.g. merchant edited product in Shopify tab and switched back)
+  useEffect(() => {
+    const handleFocus = () => {
+      loadProducts();
+      loadStoreConnection();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadProducts, loadStoreConnection]);
+
+  // 5-second polling when a sync job is running
+  useEffect(() => {
+    if (!isSyncing || !storeConnection) {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await api.get<StoreConnection>(`/stores/${storeConnection.id}`);
+        if (res.data) {
+          setStoreConnection(res.data);
+          if (res.data.sync_status !== 'running') {
+            setIsSyncing(false);
+            if (pollingRef.current) {
+              clearInterval(pollingRef.current);
+              pollingRef.current = null;
+            }
+            // Sync finished: refetch fresh products from PostgreSQL
+            await loadProducts();
+          }
+        }
+      } catch (err) {
+        setIsSyncing(false);
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+      }
+    }, 5000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [isSyncing, storeConnection?.id, loadProducts]);
+
+  // Manual Quick Sync
+  const handleQuickSync = async () => {
+    if (!storeConnection || isSyncing) return;
+    setIsSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await api.post<StoreSyncStatus>(`/stores/${storeConnection.id}/sync`);
+      if (res.data) {
+        setSyncMsg(`Synced ${res.data.records_processed} records.`);
+        await Promise.all([loadProducts(), loadStoreConnection()]);
+      }
+    } catch (err: any) {
+      setSyncMsg(err.message || 'Sync failed');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const formatPrice = (price: number) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(price);
+
+  const formatLastSync = (dateStr: string | null) => {
+    if (!dateStr) return 'Never';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (diffSec < 60) return 'Just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="space-y-6">
@@ -46,6 +156,57 @@ export default function ProductsPage() {
           </button>
         </div>
       </div>
+
+      {/* Connected Store Live Sync Status Bar */}
+      {storeConnection && (
+        <div className="bg-surface-800/80 border border-brand-500/20 rounded-xl p-3 sm:px-4 sm:py-3 flex flex-wrap items-center justify-between gap-3 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-brand-500/10 border border-brand-500/30 flex items-center justify-center text-brand-400">
+              <Store className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-white capitalize">
+                  {storeConnection.provider} Connected
+                </span>
+                <span className="text-xs text-surface-300 font-mono">
+                  ({storeConnection.store_name || storeConnection.store_url.replace('https://', '')})
+                </span>
+                {isSyncing ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30">
+                    <RefreshCw className="w-3 h-3 animate-spin" /> Syncing...
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                    <CheckCircle2 className="w-3 h-3" /> Live Synced
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-xs text-surface-300 mt-0.5">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-surface-300" /> Last updated: {formatLastSync(storeConnection.last_sync_at)}
+                </span>
+                <span className="hidden sm:inline text-surface-400">•</span>
+                <span className="hidden sm:inline text-surface-300">
+                  Shopify product updates sync automatically via webhooks
+                </span>
+                {syncMsg && <span className="text-brand-300 font-medium">({syncMsg})</span>}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleQuickSync}
+            disabled={isSyncing}
+            className="btn-secondary text-xs flex items-center gap-1.5 px-3 py-1.5 self-start sm:self-auto disabled:opacity-50"
+            title="Reconcile latest changes from connected store"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-brand-400' : ''}`} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
+          </button>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative">

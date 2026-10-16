@@ -48,6 +48,7 @@ export default function IntegrationsPage() {
   }, []);
 
   const handleSyncNow = async (connectionId: string) => {
+    if (syncingId === connectionId) return;
     setSyncingId(connectionId);
     setStatusMsg(null);
     try {
@@ -270,13 +271,35 @@ export default function IntegrationsPage() {
                   </div>
 
                   {/* Permissions & Scopes note */}
-                  <div className="text-[11px] text-surface-400 flex items-center justify-between pt-1">
+                  <div className="text-[11px] text-surface-400 flex flex-wrap items-center justify-between gap-2 pt-1">
                     <span className="flex items-center gap-1">
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                       Scopes: <span className="font-mono text-surface-300">{conn.scopes || 'read-only'}</span>
                     </span>
                     <span>Provider ID: <span className="font-mono">{conn.id.slice(0, 8)}</span></span>
                   </div>
+
+                  {/* Shopify Webhook Endpoint Notice */}
+                  {conn.provider === 'shopify' && (
+                    <div className="bg-surface-900/80 rounded-xl p-3 border border-surface-700/60 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-white flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          Automatic Real-Time Synchronization (Webhooks)
+                        </span>
+                        <span className="text-[10px] text-brand-300 font-mono bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20">
+                          Active &lt; 5s
+                        </span>
+                      </div>
+                      <p className="text-surface-400 text-[11px]">
+                        Product name, price, SKU, and stock changes in Shopify automatically trigger updates in Flowmint AI.
+                        Webhook URL registered in Shopify:
+                      </p>
+                      <div className="bg-surface-950 px-2.5 py-1.5 rounded font-mono text-[11px] text-brand-300 border border-surface-800 break-all select-all">
+                        {window.location.origin.replace(':5173', ':8000')}/api/v1/stores/shopify/webhook
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
