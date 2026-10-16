@@ -85,24 +85,40 @@ class EvaluationRunner:
             from app.ai.providers.factory import get_llm_provider
             settings = get_settings()
             if "fireworks" in self.model_name.lower() or "qwen" in self.model_name.lower() or settings.ai_provider.lower() == "fireworks":
-                has_credentials = bool(settings.fireworks_api_key)
+                if not settings.fireworks_api_key or not settings.fireworks_api_key.strip():
+                    raise ValueError(
+                        "Live Fireworks AI evaluation cannot run: FIREWORKS_API_KEY is not configured in the environment. "
+                        "Please configure FIREWORKS_API_KEY in your Render / backend environment to execute live evaluation."
+                    )
+                from app.ai.providers.fireworks_provider import FireworksProvider
+                provider = FireworksProvider(
+                    api_key=settings.fireworks_api_key,
+                    model=self.model_name or settings.fireworks_model,
+                    base_url=settings.fireworks_base_url,
+                )
+                self.orchestrator = AgentOrchestrator(provider=provider)
             elif "gpt" in self.model_name.lower():
-                has_credentials = bool(settings.openai_api_key)
+                if not settings.openai_api_key:
+                    raise ValueError("Real LLM benchmark execution is BLOCKED: OPENAI_API_KEY is not configured.")
+                self.orchestrator = AgentOrchestrator(provider=get_llm_provider(settings))
             elif "claude" in self.model_name.lower():
-                has_credentials = bool(settings.anthropic_api_key)
+                if not settings.anthropic_api_key:
+                    raise ValueError("Real LLM benchmark execution is BLOCKED: ANTHROPIC_API_KEY is not configured.")
+                self.orchestrator = AgentOrchestrator(provider=get_llm_provider(settings))
             elif "gemini" in self.model_name.lower():
-                has_credentials = bool(settings.google_api_key)
+                if not settings.google_api_key:
+                    raise ValueError("Real LLM benchmark execution is BLOCKED: GOOGLE_API_KEY is not configured.")
+                self.orchestrator = AgentOrchestrator(provider=get_llm_provider(settings))
             else:
                 has_credentials = bool(
                     settings.fireworks_api_key or settings.openai_api_key or settings.google_api_key or settings.anthropic_api_key
                 )
-
-            if not has_credentials:
-                raise ValueError(
-                    "Real LLM benchmark execution is BLOCKED: No external provider API keys configured in environment "
-                    "(FIREWORKS_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY). Missing credentials must return BLOCKED, never silent Mock fallback."
-                )
-            self.orchestrator = AgentOrchestrator(provider=get_llm_provider(settings))
+                if not has_credentials:
+                    raise ValueError(
+                        "Real LLM benchmark execution is BLOCKED: No external provider API keys configured in environment "
+                        "(FIREWORKS_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY). Missing credentials must return BLOCKED, never silent Mock fallback."
+                    )
+                self.orchestrator = AgentOrchestrator(provider=get_llm_provider(settings))
 
     def evaluate_case(self, case: EvaluationCase) -> CaseEvaluationResult:
         start_time = time.perf_counter()

@@ -27,8 +27,21 @@ class BenchmarkService:
     ) -> EvaluationBenchmark:
         """
         Executes the 900-case evaluation benchmark and saves results to the database.
+        Enforces strict separation between MockLLM and real LLM evaluation runs.
         """
-        effective_model = model_name or ("mock-llm-v1" if runner_type == "mock_llm" else "gpt-4o-mini")
+        from app.config import get_settings
+        settings = get_settings()
+
+        if runner_type == "real_llm":
+            effective_model = model_name or settings.fireworks_model or "accounts/fireworks/models/qwen3p8-max"
+            if not settings.fireworks_api_key or not settings.fireworks_api_key.strip():
+                raise ValueError(
+                    "Live Fireworks AI evaluation cannot run: FIREWORKS_API_KEY is not configured in the environment. "
+                    "Please configure FIREWORKS_API_KEY in your Render / backend environment to execute live evaluation."
+                )
+        else:
+            effective_model = model_name or "mock-llm-v1"
+
         runner = EvaluationRunner(runner_type=runner_type, model_name=effective_model)
         summary: BenchmarkSummary = runner.run_benchmark()
 

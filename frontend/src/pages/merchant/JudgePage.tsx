@@ -190,6 +190,21 @@ export default function JudgePage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* Top Navigation Bar: Back to Dashboard */}
+      <div className="flex items-center justify-between pb-1">
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-900 hover:bg-surface-800 text-brand-300 hover:text-white border border-brand-500/30 hover:border-brand-500/60 transition shadow-sm font-medium text-xs group focus:outline-none focus:ring-2 focus:ring-brand-500"
+          aria-label="Back to Dashboard"
+        >
+          <ArrowLeft className="w-4 h-4 text-brand-400 group-hover:-translate-x-0.5 transition-transform" />
+          <span>Back to Dashboard</span>
+        </Link>
+        <span className="text-[11px] font-mono text-surface-400 hidden sm:inline-block">
+          Competition Sandbox Route &bull; Standalone Mode
+        </span>
+      </div>
+
       {/* Judge Mode Hero Banner */}
       <div className="p-6 bg-gradient-to-r from-brand-950 via-surface-900 to-surface-900 border border-brand-500/40 rounded-2xl shadow-2xl relative overflow-hidden">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">

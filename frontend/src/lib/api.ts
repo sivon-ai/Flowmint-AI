@@ -68,9 +68,19 @@ class ApiClient {
     const json = await response.json();
 
     if (!response.ok) {
+      let message = 'Request failed';
+      if (json.errors?.[0]?.message) {
+        message = json.errors[0].message;
+      } else if (typeof json.detail === 'string') {
+        message = json.detail;
+      } else if (Array.isArray(json.detail)) {
+        message = json.detail.map((d: any) => d.msg || d.message || JSON.stringify(d)).join('; ');
+      } else if (json.message) {
+        message = json.message;
+      }
       throw new ApiError(
-        json.errors?.[0]?.message || 'Request failed',
-        json.errors?.[0]?.code || 'UNKNOWN',
+        message,
+        json.errors?.[0]?.code || json.code || (response.status === 401 ? 'UNAUTHORIZED' : response.status === 403 ? 'FORBIDDEN' : 'UNKNOWN'),
         response.status,
       );
     }

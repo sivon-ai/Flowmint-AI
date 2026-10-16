@@ -25,10 +25,14 @@ async def get_dataset_info(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     from app.ai.evaluation.dataset import get_dataset_breakdown
+    from app.config import get_settings
+    settings = get_settings()
     categories = get_dataset_breakdown()
     return ApiResponse.ok({
         "total_cases": sum(categories.values()),
         "categories": categories,
+        "fireworks_configured": bool(settings.fireworks_api_key and settings.fireworks_api_key.strip()),
+        "fireworks_model": settings.fireworks_model,
     })
 
 
@@ -64,9 +68,17 @@ async def run_benchmark(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    record = await BenchmarkService.run_and_record_benchmark(
-        db=db,
-        runner_type=req.runner_type,
-        model_name=req.model_name,
-    )
-    return ApiResponse.ok(EvaluationBenchmarkResponse.model_validate(record))
+    try:
+        record = await BenchmarkService.run_and_record_benchmark(
+            db=db,
+            runner_type=req.runner_type,
+            model_name=req.model_name,
+        )
+        return ApiResponse.ok(EvaluationBenchmarkResponse.model_validate(record))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )

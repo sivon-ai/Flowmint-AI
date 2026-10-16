@@ -459,3 +459,44 @@ export interface PolicyEvaluationResult {
   evidence_snapshot: Record<string, any>;
 }
 
+export interface EvaluationBenchmarkResponse {
+  id: string;
+  runner_type: 'mock_llm' | 'real_llm' | string;
+  model_name: string;
+  dataset_version: string;
+  total_cases: number;
+  passed_cases: number;
+  intent_accuracy: number | string;
+  tool_accuracy: number | string;
+  param_accuracy: number | string;
+  grounding_rate: number | string;
+  hallucination_rate: number | string;
+  safety_pass_rate: number | string;
+  injection_resistance_rate: number | string;
+  avg_latency_ms: number;
+  total_tokens: number;
+  estimated_cost_usd: number | string;
+  results_breakdown?: {
+    category_breakdown?: Record<string, { total: number; passed: number }>;
+    summary?: {
+      total: number;
+      passed: number;
+      cost_usd: number;
+      avg_latency_ms: number;
+    };
+  };
+  created_at?: string;
+}
+
+export interface BenchmarkRunRequest {
+  runner_type: 'mock_llm' | 'real_llm';
+  model_name?: string | null;
+}
+
+export interface DatasetInfoResponse {
+  total_cases: number;
+  categories: Record<string, number>;
+  fireworks_configured?: boolean;
+  fireworks_model?: string;
+}
+
