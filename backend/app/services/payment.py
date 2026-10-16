@@ -309,3 +309,145 @@ class PaymentService:
             "order.paid": "captured",
         }
         return mapping.get(event_type)
+
+    async def verify_checkout(
+        self,
+        merchant_id: uuid.UUID,
+        payment_id: uuid.UUID,
+        razorpay_order_id: str,
+        razorpay_payment_id: str,
+        razorpay_signature: str,
+    ) -> PaymentResponse:
+        """
+        Verify the Razorpay checkout signature on backend.
+        Binds to merchant, order, amount, and verifies HMAC-SHA256.
+        """
+        stmt = (
+            select(Payment, Order)
+            .join(Order, Payment.order_id == Order.id)
+            .where(Payment.id == payment_id, Payment.merchant_id == merchant_id)
+        )
+        row = (await self.db.execute(stmt)).first()
+        if not row:
+            raise NotFoundError("Payment", str(payment_id))
+        payment, order = row
+
+        if payment.provider_order_id != razorpay_order_id:
+            logger.warning(
+                "Mismatched provider_order_id for payment %s: expected %s, got %s",
+                payment.id, payment.provider_order_id, razorpay_order_id
+            )
+            raise ValidationError("Invalid payment order reference.")
+
+        # Determine secret
+        key_secret = settings.razorpay_key_secret
+        from app.models.merchant import Merchant
+        m_stmt = select(Merchant).where(Merchant.id == merchant_id)
+        merchant = (await self.db.execute(m_stmt)).scalar_one_or_none()
+        if merchant and merchant.settings and "payment_config" in merchant.settings:
+            p_conf = merchant.settings["payment_config"]
+            if p_conf.get("razorpay_key_secret"):
+                from app.core.encryption import decrypt_credentials
+                try:
+                    dec = decrypt_credentials(p_conf["razorpay_key_secret"])
+                    key_secret = dec.get("secret", key_secret)
+                except Exception:
+                    pass
+
+        # Verify signature: razorpay_order_id + "|" + razorpay_payment_id
+        msg = f"{razorpay_order_id}|{razorpay_payment_id}".encode("utf-8")
+        expected = hmac.new(key_secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+
+        if not hmac.compare_digest(expected, razorpay_signature):
+            payment.status = "failed"
+            payment.failure_reason = "Signature verification failed"
+            await self.db.commit()
+            raise PaymentError("Payment signature verification failed. Untrusted checkout.")
+
+        if payment.status != "captured":
+            if not payment.can_transition_to("captured"):
+                raise InvalidStateTransitionError("Payment", payment.status, "captured")
+
+            payment.status = "captured"
+            payment.provider_payment_id = razorpay_payment_id
+            order.status = "confirmed"
+
+            # Confirm inventory sale
+            from app.services.inventory import InventoryService
+            inv_service = InventoryService(self.db)
+            for item in order.items:
+                await inv_service.confirm_sale(order.merchant_id, item.product_id, item.quantity)
+
+            # Record event
+            self.db.add(PaymentEvent(
+                payment_id=payment.id,
+                event_type="payment.captured",
+                provider_event_id=f"checkout_{razorpay_payment_id}",
+                raw_payload={"source": "checkout_verification", "razorpay_payment_id": razorpay_payment_id},
+            ))
+
+            self.db.add(OutboxEvent(
+                event_type=EventType.PAYMENT_CAPTURED,
+                aggregate_type="payment",
+                aggregate_id=str(payment.id),
+                payload={
+                    "merchant_id": str(payment.merchant_id),
+                    "order_id": str(payment.order_id),
+                    "status": "captured",
+                    "amount": str(payment.amount),
+                },
+            ))
+
+            await self.db.commit()
+
+        return PaymentResponse.model_validate(payment)
+
+    async def get_payment_config(self, merchant_id: uuid.UUID) -> dict:
+        from app.models.merchant import Merchant
+        stmt = select(Merchant).where(Merchant.id == merchant_id)
+        merchant = (await self.db.execute(stmt)).scalar_one_or_none()
+        m_settings = (merchant.settings or {}) if merchant else {}
+        p_conf = m_settings.get("payment_config", {})
+        key_id = p_conf.get("razorpay_key_id") or settings.razorpay_key_id
+        mode = p_conf.get("razorpay_mode") or settings.razorpay_mode
+        configured = bool(key_id and (p_conf.get("razorpay_key_secret") or settings.razorpay_key_secret))
+
+        return {
+            "payment_mode": p_conf.get("payment_mode", "store_native"),
+            "razorpay_mode": mode,
+            "razorpay_key_id": key_id[:10] + "..." if len(key_id) > 10 else key_id,
+            "razorpay_configured": configured,
+            "webhook_url": f"{settings.backend_public_url}/api/v1/payments/webhook",
+        }
+
+    async def update_payment_config(self, merchant_id: uuid.UUID, data: dict) -> dict:
+        from app.models.merchant import Merchant
+        from app.core.encryption import encrypt_credentials
+        stmt = select(Merchant).where(Merchant.id == merchant_id)
+        merchant = (await self.db.execute(stmt)).scalar_one_or_none()
+        if not merchant:
+            raise NotFoundError("Merchant", str(merchant_id))
+
+        m_settings = dict(merchant.settings or {})
+        p_conf = dict(m_settings.get("payment_config", {}))
+        p_conf["payment_mode"] = data.get("payment_mode", "store_native")
+        if "razorpay_key_id" in data and data["razorpay_key_id"]:
+            p_conf["razorpay_key_id"] = data["razorpay_key_id"]
+        if "razorpay_key_secret" in data and data["razorpay_key_secret"]:
+            p_conf["razorpay_key_secret"] = encrypt_credentials({"secret": data["razorpay_key_secret"]})
+        if "razorpay_mode" in data and data["razorpay_mode"]:
+            p_conf["razorpay_mode"] = data["razorpay_mode"]
+
+        m_settings["payment_config"] = p_conf
+
+        # Update onboarding step to completed
+        onboarding = dict(m_settings.get("onboarding", {}))
+        onboarding["completed"] = True
+        onboarding["step"] = "completed"
+        onboarding["payment_mode"] = p_conf["payment_mode"]
+        m_settings["onboarding"] = onboarding
+
+        merchant.settings = m_settings
+        await self.db.commit()
+
+        return await self.get_payment_config(merchant_id)

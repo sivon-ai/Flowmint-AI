@@ -34,5 +34,7 @@ class UserResponse(BaseModel):
     full_name: str
     role: str
     is_active: bool
+    onboarding_completed: bool = False
 
     model_config = {"from_attributes": True}
+

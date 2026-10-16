@@ -19,6 +19,7 @@ import {
   FlaskConical,
   Award,
   Users,
+  Link2,
 } from 'lucide-react';
 import type { User } from '../../types';
 
@@ -43,6 +44,7 @@ const navItems = [
   { to: '/inventory', icon: Warehouse, label: 'Inventory' },
   { to: '/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/customers', icon: Users, label: 'Customers' },
+  { to: '/integrations', icon: Link2, label: 'Integrations' },
 ];
 
 export default function DashboardLayout({ user, onLogout }: Props) {

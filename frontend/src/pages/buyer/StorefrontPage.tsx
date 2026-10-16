@@ -12,6 +12,8 @@ import {
   Tag,
   ArrowRight,
   Filter,
+  CreditCard,
+  RefreshCw,
 } from 'lucide-react';
 
 const SUGGESTED_QUERIES = [
@@ -29,6 +31,129 @@ export default function StorefrontPage() {
   const [aiTraceId, setAiTraceId] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Razorpay Checkout State
+  const [checkoutProduct, setCheckoutProduct] = useState<Product | null>(null);
+  const [checkoutQty, setCheckoutQty] = useState(1);
+  const [buyerName, setBuyerName] = useState('Jane Doe');
+  const [buyerEmail, setBuyerEmail] = useState('buyer@example.com');
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [paymentSuccess, setPaymentSuccess] = useState<any>(null);
+
+  const handleBuyNow = (p: Product) => {
+    setCheckoutProduct(p);
+    setCheckoutQty(1);
+    setCheckoutError(null);
+    setPaymentSuccess(null);
+  };
+
+  const loadRazorpayScript = (): Promise<boolean> => {
+    return new Promise(resolve => {
+      if ((window as any).Razorpay) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleExecuteCheckout = async () => {
+    if (!checkoutProduct) return;
+    setIsCheckingOut(true);
+    setCheckoutError(null);
+
+    try {
+      if (!api.isAuthenticated()) {
+        throw new Error('Please sign in or use the Merchant Portal to complete purchases in development mode.');
+      }
+
+      // 1. Create Cart
+      const cartRes = await api.post<{ id: string }>('/carts', { customer_id: null });
+      if (!cartRes.data?.id) throw new Error('Failed to create shopping cart');
+      const cartId = cartRes.data.id;
+
+      // 2. Add Item
+      await api.post(`/carts/${cartId}/items`, {
+        product_id: checkoutProduct.id,
+        quantity: checkoutQty,
+      });
+
+      // 3. Create Order
+      const orderRes = await api.post<{ id: string; order_number: string }>('/orders', {
+        cart_id: cartId,
+      });
+      if (!orderRes.data?.id) throw new Error('Failed to generate order from cart');
+      const orderId = orderRes.data.id;
+
+      // 4. Initiate Razorpay Order on Backend
+      const payRes = await api.post<any>(`/payments/${orderId}/initiate`);
+      if (!payRes.data?.razorpay_order_id) {
+        throw new Error('Backend failed to create Razorpay order');
+      }
+
+      const { payment_id, razorpay_order_id, razorpay_key_id, amount, currency, order_number } = payRes.data;
+
+      // 5. Load SDK & open checkout modal
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        throw new Error('Failed to load Razorpay Checkout SDK. Check your internet connection.');
+      }
+
+      const options = {
+        key: razorpay_key_id,
+        amount: amount,
+        currency: currency,
+        name: 'Flowmint Store',
+        description: `Order ${order_number}`,
+        order_id: razorpay_order_id,
+        prefill: {
+          name: buyerName,
+          email: buyerEmail,
+        },
+        theme: {
+          color: '#8B5E3C',
+        },
+        handler: async function (response: any) {
+          try {
+            // 6. Verify signature on server
+            const verifyRes = await api.post<any>('/payments/verify', {
+              payment_id: payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+            if (verifyRes.data) {
+              setPaymentSuccess(verifyRes.data);
+            }
+          } catch (vErr: any) {
+            setCheckoutError(vErr.message || 'Payment signature verification failed.');
+          } finally {
+            setIsCheckingOut(false);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setIsCheckingOut(false);
+          },
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (resp: any) {
+        setCheckoutError(resp.error?.description || 'Payment failed.');
+        setIsCheckingOut(false);
+      });
+      rzp.open();
+    } catch (err: any) {
+      setCheckoutError(err.message || 'Checkout error occurred.');
+      setIsCheckingOut(false);
+    }
+  };
 
   // Load initial catalog
   useEffect(() => {
@@ -340,13 +465,16 @@ export default function StorefrontPage() {
                         </div>
                       </div>
 
-                      <button
-                        disabled={!inStock}
-                        className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1 disabled:opacity-40"
-                      >
-                        <span>Details</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={!inStock}
+                          onClick={() => handleBuyNow(p)}
+                          className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1 disabled:opacity-40"
+                        >
+                          <span>Buy Now</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -355,6 +483,170 @@ export default function StorefrontPage() {
           )}
         </section>
       </main>
+
+      {/* Razorpay Checkout Modal */}
+      {checkoutProduct && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="card p-6 sm:p-8 max-w-lg w-full space-y-6 animate-scale-up border-brand-500/40">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-surface-700/60">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-brand-500/15 rounded-lg border border-brand-400/25">
+                  <CreditCard className="w-5 h-5 text-brand-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Flowmint Store Checkout</h3>
+                  <div className="text-xs text-surface-400 flex items-center gap-1.5">
+                    <span>Razorpay Standard Checkout</span>
+                    <span className="badge-warning text-[10px] px-1.5 py-0.2">Test Mode</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => { setCheckoutProduct(null); setPaymentSuccess(null); }}
+                className="text-surface-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {paymentSuccess ? (
+              <div className="space-y-5 text-center py-4 animate-fade-in">
+                <div className="w-14 h-14 mx-auto rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xl font-bold text-white">Payment Verified &amp; Confirmed!</h4>
+                  <p className="text-xs text-surface-300">
+                    Your order was successfully paid and verified using server-side HMAC-SHA256 signature verification.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-surface-900 rounded-xl border border-surface-700/70 text-left text-xs space-y-2 font-mono">
+                  <div className="flex justify-between">
+                    <span className="text-surface-400">Payment ID:</span>
+                    <span className="text-emerald-300">{paymentSuccess.payment_id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-surface-400">Status:</span>
+                    <span className="text-emerald-400 font-bold uppercase">{paymentSuccess.status}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-surface-400">Amount Paid:</span>
+                    <span className="text-white font-bold">{formatCurrency(paymentSuccess.amount, paymentSuccess.currency)}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => { setCheckoutProduct(null); setPaymentSuccess(null); }}
+                  className="btn-primary w-full py-2.5 text-xs font-semibold"
+                >
+                  Return to Storefront
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {checkoutError && (
+                  <div className="p-3 bg-danger-500/10 border border-danger-500/30 rounded-lg text-xs text-danger-300 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span>{checkoutError}</span>
+                  </div>
+                )}
+
+                {/* Product Summary */}
+                <div className="p-4 bg-surface-900 rounded-xl border border-surface-700/60 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-white">{checkoutProduct.name}</h4>
+                    <span className="text-xs font-mono text-surface-400">SKU: {checkoutProduct.sku}</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-white">
+                      {formatCurrency(checkoutProduct.price, checkoutProduct.currency)}
+                    </div>
+                    <span className="text-[11px] text-surface-400">Qty: {checkoutQty}</span>
+                  </div>
+                </div>
+
+                {/* Buyer Information Form */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-surface-300 mb-1">
+                      Buyer Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={buyerName}
+                      onChange={e => setBuyerName(e.target.value)}
+                      placeholder="Jane Doe"
+                      className="input-field w-full text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-surface-300 mb-1">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      value={buyerEmail}
+                      onChange={e => setBuyerEmail(e.target.value)}
+                      placeholder="buyer@example.com"
+                      className="input-field w-full text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Total Calculation */}
+                <div className="pt-3 border-t border-surface-700/60 space-y-1.5 text-xs">
+                  <div className="flex justify-between text-surface-400">
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(checkoutProduct.price * checkoutQty, checkoutProduct.currency)}</span>
+                  </div>
+                  <div className="flex justify-between text-surface-400">
+                    <span>Estimated Tax</span>
+                    <span>₹0.00</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold text-white pt-1 border-t border-surface-800">
+                    <span>Total Amount</span>
+                    <span className="text-brand-400">
+                      {formatCurrency(checkoutProduct.price * checkoutQty, checkoutProduct.currency)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutProduct(null)}
+                    className="btn-secondary text-xs px-4 py-2"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isCheckingOut}
+                    onClick={handleExecuteCheckout}
+                    className="btn-primary text-xs px-5 py-2.5 flex items-center gap-2"
+                  >
+                    {isCheckingOut ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Opening Razorpay...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>Pay with Razorpay</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -20,6 +20,8 @@ import JudgePage from './pages/merchant/JudgePage';
 import StorefrontPage from './pages/buyer/StorefrontPage';
 import CustomersPage from './pages/merchant/CustomersPage';
 import CustomerDetailPage from './pages/merchant/CustomerDetailPage';
+import OnboardingPage from './pages/merchant/OnboardingPage';
+import IntegrationsPage from './pages/merchant/IntegrationsPage';
 import type { User } from './types';
 
 export default function App() {
@@ -58,23 +60,41 @@ export default function App() {
     );
   }
 
+  const needsOnboarding = user && user.onboarding_completed === false;
+
   return (
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={
-        user ? <Navigate to="/dashboard" /> : <LoginPage onLogin={handleLogin} />
+        user ? (
+          <Navigate to={needsOnboarding ? '/onboarding/connect-store' : '/dashboard'} replace />
+        ) : (
+          <LoginPage onLogin={handleLogin} />
+        )
       } />
       <Route path="/store" element={<StorefrontPage />} />
-      {!user && (
-        <Route path="/judge" element={
-          <div className="min-h-screen bg-surface-950 p-6 md:p-10 text-white">
-            <JudgePage />
-          </div>
-        } />
+      <Route path="/judge" element={
+        <div className="min-h-screen bg-surface-950 p-6 md:p-10 text-white">
+          <JudgePage />
+        </div>
+      } />
+
+      {/* Onboarding routes */}
+      {user && (
+        <Route
+          path="/onboarding/connect-store"
+          element={<OnboardingPage user={user} onUpdateUser={setUser} />}
+        />
+      )}
+      {user && (
+        <Route
+          path="/onboarding/*"
+          element={<Navigate to="/onboarding/connect-store" replace />}
+        />
       )}
 
       {/* Protected merchant routes */}
-      {user ? (
+      {user && !needsOnboarding ? (
         <Route element={<DashboardLayout user={user} onLogout={handleLogout} />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/judge" element={<JudgePage />} />
@@ -93,11 +113,26 @@ export default function App() {
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
+          <Route path="/integrations" element={<IntegrationsPage />} />
         </Route>
       ) : null}
 
-      {/* Redirect */}
-      <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} />} />
+      {/* Redirect fallback */}
+      <Route
+        path="*"
+        element={
+          <Navigate
+            to={
+              user
+                ? needsOnboarding
+                  ? '/onboarding/connect-store'
+                  : '/dashboard'
+                : '/login'
+            }
+            replace
+          />
+        }
+      />
     </Routes>
   );
 }

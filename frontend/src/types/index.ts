@@ -197,7 +197,62 @@ export interface User {
   full_name: string;
   role: string;
   is_active: boolean;
+  onboarding_completed?: boolean;
 }
+
+export interface StoreConnection {
+  id: string;
+  merchant_id: string;
+  provider: 'shopify' | 'woocommerce' | 'custom';
+  store_url: string;
+  store_name: string | null;
+  external_store_id: string | null;
+  status: 'connected' | 'needs_configuration' | 'syncing' | 'synced' | 'error' | 'disconnected';
+  scopes: string | null;
+  sync_status: 'idle' | 'running' | 'completed' | 'failed';
+  last_sync_at: string | null;
+  sync_summary: {
+    products?: number;
+    customers?: number;
+    orders?: number;
+    inventory?: number;
+  } | null;
+  last_error: string | null;
+  disconnected_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OnboardingStatus {
+  onboarding_completed: boolean;
+  onboarding_step: 'connect_store' | 'payment_setup' | 'completed';
+  store_connected: boolean;
+  store_mode: 'shopify' | 'woocommerce' | 'custom' | 'manual' | null;
+  setup_mode?: 'shopify' | 'woocommerce' | 'custom' | 'manual' | 'unconfigured' | null;
+  active_store: StoreConnection | null;
+  payment_mode: string | null;
+  razorpay_mode: 'test' | 'live';
+  razorpay_configured: boolean;
+}
+
+export interface PaymentConfig {
+  payment_mode: string;
+  razorpay_mode: 'test' | 'live';
+  razorpay_key_id: string | null;
+  razorpay_configured: boolean;
+  webhook_url: string;
+}
+
+export interface StoreSyncStatus {
+  connection_id: string;
+  sync_status: 'idle' | 'running' | 'completed' | 'failed';
+  last_sync_at: string | null;
+  sync_summary: Record<string, number>;
+  records_processed: number;
+  records_failed: number;
+  last_error: string | null;
+}
+
 
 export interface ToolCallInfo {
   tool: string;

@@ -40,7 +40,19 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
 
-    # --- Razorpay (TEST MODE) ---
+    # --- Frontend & Backend URLs ---
+    frontend_url: str = "http://localhost:5173"
+    backend_public_url: str = "http://localhost:8000"
+
+    # --- Store Integrations ---
+    store_encryption_key: str = ""
+    shopify_client_id: str = ""
+    shopify_client_secret: str = ""
+    shopify_redirect_uri: str = "http://localhost:8000/api/v1/stores/shopify/callback"
+    shopify_api_version: str = "2024-01"
+
+    # --- Razorpay ---
+    razorpay_mode: str = "test"  # test, live
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""

@@ -37,5 +37,11 @@ from app.models.attribution import (  # noqa: F401
     AttributionLabel,
     AttributionMethod,
 )
+from app.models.store_connection import (  # noqa: F401
+    StoreConnection,
+    StoreSyncJob,
+    StoreEntityMapping,
+)
+
 
 

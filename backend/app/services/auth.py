@@ -129,11 +129,37 @@ class AuthService:
         )
 
     async def get_current_user(self, user_id: uuid.UUID) -> UserResponse:
-        """Get user profile."""
+        """Get user profile with persistent onboarding state."""
         result = await self.db.execute(
             select(User).where(User.id == user_id)
         )
         user = result.scalar_one_or_none()
         if not user:
             raise AuthenticationError("User not found")
-        return UserResponse.model_validate(user)
+
+        # Determine onboarding completion state
+        m_stmt = select(Merchant).where(Merchant.id == user.merchant_id)
+        merchant = (await self.db.execute(m_stmt)).scalar_one_or_none()
+        onboarding_completed = False
+        if merchant:
+            m_settings = merchant.settings or {}
+            onboarding_completed = m_settings.get("onboarding", {}).get("completed", False)
+            if not onboarding_completed:
+                from app.models.store_connection import StoreConnection
+                c_stmt = select(StoreConnection.id).where(
+                    StoreConnection.merchant_id == user.merchant_id,
+                    StoreConnection.status.in_(["connected", "synced", "syncing"]),
+                )
+                if (await self.db.execute(c_stmt)).scalar_one_or_none():
+                    onboarding_completed = True
+
+        return UserResponse(
+            id=user.id,
+            merchant_id=user.merchant_id,
+            email=user.email,
+            full_name=user.full_name,
+            role=user.role,
+            is_active=user.is_active,
+            onboarding_completed=onboarding_completed,
+        )
+
