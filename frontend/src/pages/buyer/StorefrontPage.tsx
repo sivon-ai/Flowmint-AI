@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
-import type { Product, AgentChatResponse } from '../../types';
+import type { Product, AgentChatResponse, PaymentConfig, StoreConnection } from '../../types';
 import {
   Search,
   ShoppingBag,
@@ -11,9 +12,12 @@ import {
   AlertCircle,
   Tag,
   ArrowRight,
+  ArrowLeft,
   Filter,
   CreditCard,
   RefreshCw,
+  Store,
+  ExternalLink,
 } from 'lucide-react';
 
 const SUGGESTED_QUERIES = [
@@ -31,6 +35,8 @@ export default function StorefrontPage() {
   const [aiTraceId, setAiTraceId] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
+  const [connections, setConnections] = useState<StoreConnection[]>([]);
 
   // Razorpay Checkout State
   const [checkoutProduct, setCheckoutProduct] = useState<Product | null>(null);
@@ -155,9 +161,18 @@ export default function StorefrontPage() {
     }
   };
 
-  // Load initial catalog
+  // Load initial catalog and merchant commerce configuration
   useEffect(() => {
     loadFeaturedProducts();
+    if (api.isAuthenticated()) {
+      Promise.all([
+        api.get<PaymentConfig>('/payments/config').catch(() => ({ data: null })),
+        api.get<StoreConnection[]>('/stores').catch(() => ({ data: [] })),
+      ]).then(([payRes, connRes]) => {
+        if (payRes.data) setPaymentConfig(payRes.data);
+        if (connRes.data) setConnections(connRes.data);
+      });
+    }
   }, []);
 
   const loadFeaturedProducts = async () => {
@@ -248,6 +263,12 @@ export default function StorefrontPage() {
       maximumFractionDigits: 0,
     }).format(val);
 
+  const isPaymentLater = Boolean(
+    paymentConfig?.payment_mode === 'later' ||
+    (paymentConfig && !paymentConfig.razorpay_configured && paymentConfig.payment_mode !== 'razorpay')
+  );
+  const isStoreNative = Boolean(paymentConfig?.payment_mode === 'store_native' && connections.length > 0);
+
   return (
     <div className="min-h-screen bg-surface-950">
       {/* Header */}
@@ -262,9 +283,19 @@ export default function StorefrontPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <a href="/dashboard" className="text-xs text-surface-300 hover:text-white transition-colors">
-              Merchant Portal
-            </a>
+            {api.isAuthenticated() ? (
+              <Link
+                to="/dashboard"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-brand-300 hover:text-white border border-surface-700/80 text-xs font-medium transition"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-brand-400" />
+                <span>Return to Dashboard</span>
+              </Link>
+            ) : (
+              <a href="/login" className="text-xs text-surface-300 hover:text-white transition-colors">
+                Merchant Sign In
+              </a>
+            )}
             <button className="btn-secondary flex items-center gap-2 text-xs py-2">
               <ShoppingBag className="w-4 h-4" />
               <span>Cart (0)</span>
@@ -272,6 +303,41 @@ export default function StorefrontPage() {
           </div>
         </div>
       </header>
+
+      {/* Authenticated Merchant Preview Banner */}
+      {api.isAuthenticated() && (
+        <div className="bg-surface-900 border-b border-surface-800 px-6 py-2.5">
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-brand-500/20 text-brand-300 border border-brand-500/30 uppercase tracking-wider">
+                Storefront Preview
+              </span>
+              <span className="text-surface-300">
+                {isPaymentLater ? (
+                  <span>
+                    Purchasing &amp; checkout are <strong>unavailable</strong> because payment setup was deferred ('Configure Later'). Products and AI search are fully previewable.
+                  </span>
+                ) : isStoreNative ? (
+                  <span>
+                    Primary checkout is managed via your connected <strong>{connections[0]?.store_name || connections[0]?.provider}</strong> store. Flowmint provides AI product discovery.
+                  </span>
+                ) : (
+                  <span>
+                    Flowmint-hosted commerce is active with Razorpay ({paymentConfig?.razorpay_mode === 'live' ? 'Live Mode' : 'Test Sandbox'}).
+                  </span>
+                )}
+              </span>
+            </div>
+
+            <Link
+              to="/integrations"
+              className="text-brand-400 hover:text-brand-300 font-medium underline self-start sm:self-auto shrink-0"
+            >
+              Commerce &amp; Payment Settings &rarr;
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Hero Search Section */}
       <section className="py-14 px-6 border-b border-surface-800/60 bg-gradient-to-b from-surface-900/40 to-surface-950">
@@ -553,6 +619,37 @@ export default function StorefrontPage() {
                   </div>
                 )}
 
+                {isPaymentLater && (
+                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1.5 text-xs text-amber-200">
+                    <div className="flex items-center gap-2 font-bold text-amber-300">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>Checkout Unavailable in Preview Mode</span>
+                    </div>
+                    <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                      Payment configuration was set to <strong>'Configure Later'</strong>. Customers cannot complete checkout on this storefront until a payment gateway (Razorpay) is configured.
+                    </p>
+                    <Link
+                      to="/integrations"
+                      className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-brand-400 hover:text-brand-300 pt-0.5"
+                    >
+                      <span>Configure Payments in Integrations</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </Link>
+                  </div>
+                )}
+
+                {isStoreNative && (
+                  <div className="p-3.5 bg-cyan-500/10 border border-cyan-500/30 rounded-xl space-y-1 text-xs text-cyan-200">
+                    <div className="flex items-center gap-2 font-bold text-cyan-300">
+                      <Store className="w-4 h-4 shrink-0" />
+                      <span>External Store Checkout Active</span>
+                    </div>
+                    <p className="text-[11px] text-cyan-200/90 leading-relaxed">
+                      Your store uses native checkout on {connections[0]?.store_name || connections[0]?.provider}. Completed orders placed on your external storefront are automatically ingested and reconciled by Flowmint AI.
+                    </p>
+                  </div>
+                )}
+
                 {/* Product Summary */}
                 <div className="p-4 bg-surface-900 rounded-xl border border-surface-700/60 flex items-center justify-between">
                   <div>
@@ -625,9 +722,10 @@ export default function StorefrontPage() {
                   </button>
                   <button
                     type="button"
-                    disabled={isCheckingOut}
+                    disabled={isCheckingOut || isPaymentLater}
                     onClick={handleExecuteCheckout}
-                    className="btn-primary text-xs px-5 py-2.5 flex items-center gap-2"
+                    className="btn-primary text-xs px-5 py-2.5 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={isPaymentLater ? 'Checkout disabled: Configure payment mode in Integrations' : undefined}
                   >
                     {isCheckingOut ? (
                       <>
@@ -637,7 +735,7 @@ export default function StorefrontPage() {
                     ) : (
                       <>
                         <CreditCard className="w-3.5 h-3.5" />
-                        <span>Pay with Razorpay</span>
+                        <span>{isPaymentLater ? 'Checkout Unavailable' : 'Pay with Razorpay'}</span>
                       </>
                     )}
                   </button>

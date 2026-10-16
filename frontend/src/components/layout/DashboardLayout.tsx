@@ -8,7 +8,6 @@ import {
   ShoppingCart,
   LogOut,
   Zap,
-  ChevronRight,
   Lightbulb,
   TrendingUp,
   ShieldCheck,
@@ -28,23 +27,54 @@ interface Props {
   onLogout: () => void;
 }
 
-const navItems = [
-  { to: '/judge', icon: Award, label: 'Judge Walkthrough', badge: 'JUDGE' },
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/copilot', icon: Bot, label: 'AI Copilot', badge: 'AI' },
-  { to: '/opportunities', icon: Lightbulb, label: 'Opportunities' },
-  { to: '/simulations', icon: TrendingUp, label: 'Simulations' },
-  { to: '/approvals', icon: CheckSquare, label: 'Approvals', badge: 'HITL' },
-  { to: '/policies', icon: ShieldCheck, label: 'Policy Engine' },
-  { to: '/attribution', icon: DollarSign, label: 'Attribution', badge: 'ROI' },
-  { to: '/traces', icon: GitBranch, label: 'Trace Viewer' },
-  { to: '/evaluation', icon: FlaskConical, label: 'AI Evaluation', badge: '900' },
-  { to: '/audit', icon: FileText, label: 'Audit Trail' },
-  { to: '/products', icon: Package, label: 'Products' },
-  { to: '/inventory', icon: Warehouse, label: 'Inventory' },
-  { to: '/orders', icon: ShoppingCart, label: 'Orders' },
-  { to: '/customers', icon: Users, label: 'Customers' },
-  { to: '/integrations', icon: Link2, label: 'Integrations' },
+interface NavItem {
+  to: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  badge?: string;
+}
+
+interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
+const navSections: NavSection[] = [
+  {
+    title: 'Workspace',
+    items: [
+      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/products', icon: Package, label: 'Products' },
+      { to: '/inventory', icon: Warehouse, label: 'Inventory' },
+      { to: '/orders', icon: ShoppingCart, label: 'Orders' },
+      { to: '/customers', icon: Users, label: 'Customers' },
+    ],
+  },
+  {
+    title: 'Revenue Intelligence',
+    items: [
+      { to: '/copilot', icon: Bot, label: 'AI Copilot', badge: 'AI' },
+      { to: '/opportunities', icon: Lightbulb, label: 'Opportunities' },
+      { to: '/simulations', icon: TrendingUp, label: 'Simulations' },
+      { to: '/attribution', icon: DollarSign, label: 'Attribution', badge: 'ROI' },
+    ],
+  },
+  {
+    title: 'Governance & Observability',
+    items: [
+      { to: '/approvals', icon: CheckSquare, label: 'Approvals', badge: 'HITL' },
+      { to: '/policies', icon: ShieldCheck, label: 'Policy Engine' },
+      { to: '/traces', icon: GitBranch, label: 'Trace Viewer' },
+      { to: '/evaluation', icon: FlaskConical, label: 'AI Evaluation', badge: '900' },
+      { to: '/audit', icon: FileText, label: 'Audit Trail' },
+    ],
+  },
+  {
+    title: 'Settings & Connections',
+    items: [
+      { to: '/integrations', icon: Link2, label: 'Integrations' },
+    ],
+  },
 ];
 
 export default function DashboardLayout({ user, onLogout }: Props) {
@@ -79,25 +109,52 @@ export default function DashboardLayout({ user, onLogout }: Props) {
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map(item => (
+        {/* Navigation Sections */}
+        <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
+          {/* Dedicated Competition / Demo Entry */}
+          <div>
+            <div className="text-[10px] font-bold text-surface-400 tracking-wider uppercase px-3 pb-1">
+              Demo Walkthrough
+            </div>
             <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/dashboard' || item.to === '/judge'}
+              to="/judge"
               className={({ isActive }) =>
-                isItemActive(item.to, isActive) ? 'nav-link-active' : 'nav-link'
+                isItemActive('/judge', isActive) ? 'nav-link-active' : 'nav-link'
               }
             >
-              <item.icon className="w-4.5 h-4.5" />
-              <span className="flex-1">{item.label}</span>
-              {item.badge && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-500/15 text-brand-400 border border-brand-400/30">
-                  {item.badge}
-                </span>
-              )}
+              <Award className="w-4.5 h-4.5 text-brand-400" />
+              <span className="flex-1 font-medium">Judge Walkthrough</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-500/15 text-brand-400 border border-brand-400/30">
+                JUDGE
+              </span>
             </NavLink>
+          </div>
+
+          {/* Categorized Sections */}
+          {navSections.map(section => (
+            <div key={section.title} className="space-y-0.5">
+              <div className="text-[10px] font-bold text-surface-400 tracking-wider uppercase px-3 pb-1">
+                {section.title}
+              </div>
+              {section.items.map(item => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/dashboard'}
+                  className={({ isActive }) =>
+                    isItemActive(item.to, isActive) ? 'nav-link-active' : 'nav-link'
+                  }
+                >
+                  <item.icon className="w-4.5 h-4.5" />
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-500/15 text-brand-400 border border-brand-400/30">
+                      {item.badge}
+                    </span>
+                  )}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import type { StoreConnection, StoreSyncStatus, PaymentConfig } from '../../types';
 import {
@@ -16,6 +17,9 @@ import {
   ShoppingCart,
   Clock,
   Lock,
+  Store,
+  Sparkles,
+  Info,
 } from 'lucide-react';
 
 export default function IntegrationsPage() {
@@ -97,9 +101,13 @@ export default function IntegrationsPage() {
     });
   };
 
+  const isStoreNative = paymentConfig?.payment_mode === 'store_native';
+  const isPaymentLater = paymentConfig?.payment_mode === 'later';
+  const isRazorpayActive = paymentConfig?.payment_mode === 'razorpay';
+
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Header */}
+      {/* Header with Clear Action Hierarchy */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
@@ -111,13 +119,29 @@ export default function IntegrationsPage() {
           </p>
         </div>
 
-        <a
-          href="/onboarding/connect-store"
-          className="btn-primary text-xs flex items-center gap-2 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Connect Another Store</span>
-        </a>
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          {/* Secondary Action: Preview Customer-Facing Storefront */}
+          <Link
+            to="/store"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-secondary text-xs flex items-center gap-2 py-2 px-3.5 border-surface-700 hover:border-brand-500/50 hover:bg-surface-800 text-surface-200 transition"
+            title="Preview customer-facing Flowmint storefront in a new tab"
+          >
+            <Store className="w-4 h-4 text-brand-400" />
+            <span>Preview Storefront</span>
+            <ExternalLink className="w-3.5 h-3.5 text-surface-400" />
+          </Link>
+
+          {/* Primary Action: Connect Another External Store */}
+          <a
+            href="/onboarding/connect-store"
+            className="btn-primary text-xs flex items-center gap-2 py-2 px-3.5 shadow-md"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Connect Another Store</span>
+          </a>
+        </div>
       </div>
 
       {statusMsg && (
@@ -136,6 +160,54 @@ export default function IntegrationsPage() {
           <span>{statusMsg.text}</span>
         </div>
       )}
+
+      {/* Customer-Facing Storefront Channel Overview */}
+      <section className="card p-5 bg-gradient-to-r from-surface-900 via-surface-900 to-surface-950 border-surface-700/80 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand-500/15 border border-brand-400/30 flex items-center justify-center text-brand-400">
+              <Store className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Flowmint Customer Storefront</h3>
+                <span
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold border ${
+                    isPaymentLater
+                      ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                      : isStoreNative
+                      ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30'
+                      : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                  }`}
+                >
+                  {isPaymentLater
+                    ? 'PREVIEW ONLY (CHECKOUT PENDING)'
+                    : isStoreNative
+                    ? 'EXTERNAL CHECKOUT ACTIVE'
+                    : 'HOSTED COMMERCE ACTIVE'}
+                </span>
+              </div>
+              <p className="text-xs text-surface-400 mt-0.5">
+                {isStoreNative
+                  ? 'Your connected external store remains your primary storefront and checkout. The Flowmint storefront provides an AI product discovery preview.'
+                  : isPaymentLater
+                  ? 'Payment gateway setup was deferred. The customer storefront can be previewed, but checkout is disabled until payment credentials are configured.'
+                  : 'Flowmint-hosted storefront with direct Razorpay checkout enabled.'}
+              </p>
+            </div>
+          </div>
+
+          <Link
+            to="/store"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-brand-300 hover:text-white font-medium bg-surface-800/80 hover:bg-surface-800 px-3 py-1.5 rounded-lg border border-surface-700 transition self-start sm:self-auto shrink-0"
+          >
+            <span>Open Preview</span>
+            <ExternalLink className="w-3.5 h-3.5 text-brand-400" />
+          </Link>
+        </div>
+      </section>
 
       {/* Connected Stores Section */}
       <section className="space-y-4">
@@ -285,15 +357,15 @@ export default function IntegrationsPage() {
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-white flex items-center gap-1.5">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                          Automatic Real-Time Synchronization (Webhooks)
+                          Automatic Real-Time Webhook Pipeline
                         </span>
                         <span className="text-[10px] text-brand-300 font-mono bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20">
-                          Active &lt; 5s
+                          Active Webhooks
                         </span>
                       </div>
                       <p className="text-surface-400 text-[11px]">
-                        Product name, price, SKU, and stock changes in Shopify automatically trigger updates in Flowmint AI.
-                        Webhook URL registered in Shopify:
+                        Product, price, inventory, and order changes in Shopify automatically synchronize with Flowmint AI.
+                        Webhook receiver registered:
                       </p>
                       <div className="bg-surface-950 px-2.5 py-1.5 rounded font-mono text-[11px] text-brand-300 border border-surface-800 break-all select-all">
                         {window.location.origin.replace(':5173', ':8000')}/api/v1/stores/shopify/webhook

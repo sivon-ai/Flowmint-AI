@@ -14,6 +14,8 @@ import {
   ArrowRight,
   Percent,
   CreditCard,
+  Store,
+  ExternalLink,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -56,6 +58,17 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            to="/store"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-secondary flex items-center gap-1.5 text-xs py-2 px-3 text-surface-200 hover:text-white"
+            title="Preview customer-facing Flowmint storefront in a new tab"
+          >
+            <Store className="w-3.5 h-3.5 text-brand-400" />
+            <span>Preview Storefront</span>
+            <ExternalLink className="w-3 h-3 text-surface-400" />
+          </Link>
           <Link
             to="/simulations"
             className="btn-secondary flex items-center gap-2 text-sm"
