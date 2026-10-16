@@ -18,6 +18,8 @@ import TraceViewerPage from './pages/merchant/TraceViewerPage';
 import EvaluationPage from './pages/merchant/EvaluationPage';
 import JudgePage from './pages/merchant/JudgePage';
 import StorefrontPage from './pages/buyer/StorefrontPage';
+import CustomersPage from './pages/merchant/CustomersPage';
+import CustomerDetailPage from './pages/merchant/CustomerDetailPage';
 import type { User } from './types';
 
 export default function App() {
@@ -89,6 +91,8 @@ export default function App() {
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/orders" element={<OrdersPage />} />
+          <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
         </Route>
       ) : null}
 

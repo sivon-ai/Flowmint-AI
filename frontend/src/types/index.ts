@@ -94,6 +94,46 @@ export interface ProductImportResult {
   errors: string[];
 }
 
+export interface Customer {
+  id: string;
+  merchant_id: string;
+  email: string;
+  name: string;
+  phone: string | null;
+  metadata_json?: Record<string, any> | null;
+  order_count: number;
+  total_spent: number;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface CustomerCreateRequest {
+  name: string;
+  email: string;
+  phone?: string | null;
+  metadata?: Record<string, any> | null;
+}
+
+export interface CustomerUpdateRequest {
+  name?: string;
+  email?: string;
+  phone?: string | null;
+  metadata?: Record<string, any> | null;
+}
+
+export interface CustomerPurchaseSummary {
+  total_orders: number;
+  total_spent: number;
+  last_order_date: string | null;
+  average_order_value: number;
+}
+
+export interface CustomerOrdersResponse {
+  customer_id: string;
+  summary: CustomerPurchaseSummary;
+  orders: Order[];
+}
+
 export interface Order {
   id: string;
   merchant_id: string;
