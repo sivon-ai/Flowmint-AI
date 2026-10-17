@@ -69,11 +69,32 @@ class PaymentService:
 
         # Create Razorpay order
         amount_paise = int(order.total * 100)
-        idempotency_key = f"pay_{order_id}_{uuid.uuid4().hex[:8]}"
+        # Resolve merchant name and custom Razorpay keys if configured
+        from app.models.merchant import Merchant
+        from app.core.encryption import decrypt_credentials
+
+        m_result = await self.db.execute(
+            select(Merchant).where(Merchant.id == merchant_id)
+        )
+        merchant = m_result.scalar_one_or_none()
+        merchant_name = merchant.name if merchant else "Flowmint Store"
+
+        key_id = settings.razorpay_key_id
+        key_secret = settings.razorpay_key_secret
+        if merchant and merchant.settings and "payment_config" in merchant.settings:
+            p_conf = merchant.settings["payment_config"]
+            if p_conf.get("razorpay_key_id"):
+                key_id = p_conf["razorpay_key_id"]
+            if p_conf.get("razorpay_key_secret"):
+                try:
+                    dec = decrypt_credentials(p_conf["razorpay_key_secret"])
+                    key_secret = dec.get("secret", key_secret)
+                except Exception as dec_err:
+                    logger.warning("Could not decrypt merchant razorpay_key_secret: %s", dec_err)
 
         try:
             import razorpay
-            client = razorpay.Client(auth=(settings.razorpay_key_id, settings.razorpay_key_secret))
+            client = razorpay.Client(auth=(key_id, key_secret))
             rz_order = client.order.create({
                 "amount": amount_paise,
                 "currency": order.currency,
@@ -111,17 +132,10 @@ class PaymentService:
         await self.db.commit()
         await self.db.refresh(payment)
 
-        # Get merchant name
-        from app.models.merchant import Merchant
-        m_result = await self.db.execute(
-            select(Merchant.name).where(Merchant.id == merchant_id)
-        )
-        merchant_name = m_result.scalar() or "Flowmint Store"
-
         return RazorpayOrderResponse(
             payment_id=payment.id,
             razorpay_order_id=provider_order_id,
-            razorpay_key_id=settings.razorpay_key_id,
+            razorpay_key_id=key_id,
             amount=amount_paise,
             currency=order.currency,
             order_number=order.order_number,
@@ -409,13 +423,14 @@ class PaymentService:
         m_settings = (merchant.settings or {}) if merchant else {}
         p_conf = m_settings.get("payment_config", {})
         key_id = p_conf.get("razorpay_key_id") or settings.razorpay_key_id
-        mode = p_conf.get("razorpay_mode") or settings.razorpay_mode
+        mode = p_conf.get("razorpay_mode") or settings.razorpay_mode or "test"
         configured = bool(key_id and (p_conf.get("razorpay_key_secret") or settings.razorpay_key_secret))
 
+        masked_key = (key_id[:10] + "...") if key_id and len(key_id) > 10 else key_id
         return {
             "payment_mode": p_conf.get("payment_mode", "store_native"),
             "razorpay_mode": mode,
-            "razorpay_key_id": key_id[:10] + "..." if len(key_id) > 10 else key_id,
+            "razorpay_key_id": masked_key,
             "razorpay_configured": configured,
             "webhook_url": f"{settings.backend_public_url}/api/v1/payments/webhook",
         }
@@ -430,13 +445,28 @@ class PaymentService:
 
         m_settings = dict(merchant.settings or {})
         p_conf = dict(m_settings.get("payment_config", {}))
-        p_conf["payment_mode"] = data.get("payment_mode", "store_native")
-        if "razorpay_key_id" in data and data["razorpay_key_id"]:
-            p_conf["razorpay_key_id"] = data["razorpay_key_id"]
-        if "razorpay_key_secret" in data and data["razorpay_key_secret"]:
-            p_conf["razorpay_key_secret"] = encrypt_credentials({"secret": data["razorpay_key_secret"]})
-        if "razorpay_mode" in data and data["razorpay_mode"]:
+
+        # Update payment mode if provided
+        if data.get("payment_mode"):
+            p_conf["payment_mode"] = data["payment_mode"]
+        elif "payment_mode" not in p_conf:
+            p_conf["payment_mode"] = "store_native"
+
+        # Update gateway keys only when non-empty string provided (never overwrite with empty or None)
+        if data.get("razorpay_key_id") and str(data["razorpay_key_id"]).strip():
+            p_conf["razorpay_key_id"] = str(data["razorpay_key_id"]).strip()
+
+        if data.get("razorpay_key_secret") and str(data["razorpay_key_secret"]).strip():
+            p_conf["razorpay_key_secret"] = encrypt_credentials({"secret": str(data["razorpay_key_secret"]).strip()})
+
+        if data.get("razorpay_webhook_secret") and str(data["razorpay_webhook_secret"]).strip():
+            p_conf["razorpay_webhook_secret"] = encrypt_credentials({"secret": str(data["razorpay_webhook_secret"]).strip()})
+
+        # Update environment mode if provided (default test; never switch to live automatically)
+        if data.get("razorpay_mode"):
             p_conf["razorpay_mode"] = data["razorpay_mode"]
+        elif "razorpay_mode" not in p_conf:
+            p_conf["razorpay_mode"] = "test"
 
         m_settings["payment_config"] = p_conf
 

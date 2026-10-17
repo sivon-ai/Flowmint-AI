@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '../context/ThemeContext';
 import DashboardLayout from '../components/layout/DashboardLayout';
@@ -366,5 +366,170 @@ describe('Storefront Page Behavior & Commerce Configuration Respect', () => {
     // Link to configure payments in Integrations should be present
     const configLink = screen.getByRole('link', { name: /Configure Payments in Integrations/i });
     expect(configLink).toHaveAttribute('href', '/integrations');
+  });
+
+  it('enables Razorpay checkout when payment mode is razorpay_hosted and gateway is configured', async () => {
+    api.setToken('valid-merchant-token');
+
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/products')) {
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({ success: true, data: mockProducts }),
+        });
+      }
+      if (url.includes('/payments/config')) {
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              payment_mode: 'razorpay_hosted',
+              razorpay_configured: true,
+              razorpay_key_id: 'rzp_test_9999999999',
+              razorpay_mode: 'test',
+              webhook_url: 'https://api.flowmint.test/webhooks/razorpay',
+            },
+          }),
+        });
+      }
+      if (url.includes('/stores')) {
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({ success: true, data: [] }),
+        });
+      }
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ success: true, data: {} }),
+      });
+    });
+
+    render(
+      <ThemeProvider>
+        <MemoryRouter>
+          <StorefrontPage />
+        </MemoryRouter>
+      </ThemeProvider>
+    );
+
+    // Verify preview banner shows active hosted commerce
+    expect(await screen.findByText('Storefront Preview')).toBeInTheDocument();
+    expect(screen.getByText(/Flowmint-hosted commerce is/i)).toBeInTheDocument();
+
+    // Open checkout modal
+    const buyNowBtn = screen.getByRole('button', { name: /Buy Now/i });
+    fireEvent.click(buyNowBtn);
+
+    expect(await screen.findByText('Flowmint Store Checkout')).toBeInTheDocument();
+
+    // The Pay button should be enabled and say "Pay with Razorpay"
+    const payBtn = screen.getByRole('button', { name: /Pay with Razorpay/i });
+    expect(payBtn).toBeInTheDocument();
+    expect(payBtn).not.toBeDisabled();
+  });
+});
+
+describe('Payment Configuration Modal in IntegrationsPage', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    api.clearTokens();
+    vi.restoreAllMocks();
+  });
+
+  it('opens modal, allows switching from later to razorpay_hosted, preserves credentials, and saves test mode', async () => {
+    let currentConfig: PaymentConfig = {
+      payment_mode: 'later',
+      razorpay_configured: true,
+      razorpay_key_id: 'rzp_test_1234567890',
+      razorpay_mode: 'test',
+      webhook_url: 'https://api.flowmint.test/webhooks/razorpay',
+    };
+
+    let postPayload: any = null;
+
+    globalThis.fetch = vi.fn().mockImplementation((url: string, options?: any) => {
+      if (url.includes('/api/v1/stores')) {
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({ success: true, data: [] }),
+        });
+      }
+      if (url.includes('/api/v1/payments/config') && options?.method === 'POST') {
+        postPayload = JSON.parse(options.body);
+        currentConfig = {
+          ...currentConfig,
+          payment_mode: postPayload.payment_mode,
+          razorpay_mode: postPayload.razorpay_mode,
+        };
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({ success: true, data: currentConfig }),
+        });
+      }
+      if (url.includes('/api/v1/payments/config')) {
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({ success: true, data: currentConfig }),
+        });
+      }
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ success: true, data: {} }),
+      });
+    });
+
+    render(
+      <ThemeProvider>
+        <MemoryRouter>
+          <IntegrationsPage />
+        </MemoryRouter>
+      </ThemeProvider>
+    );
+
+    // Initial state: shows Configure Later in Payment Mode
+    expect(await screen.findByText('Configure Later (Preview Only)')).toBeInTheDocument();
+
+    // 1. Click "Configure Payments" button
+    const configureBtn = screen.getByRole('button', { name: /Configure Payments/i });
+    fireEvent.click(configureBtn);
+
+    // 2. Modal appears with all 4 options
+    expect(await screen.findByText('Configure Payment Processing')).toBeInTheDocument();
+    expect(screen.getByText('Existing Store Checkout (Store Native)')).toBeInTheDocument();
+    expect(screen.getByText('Razorpay Payment Reconciliation')).toBeInTheDocument();
+    expect(screen.getByText('Flowmint-Hosted Razorpay Checkout')).toBeInTheDocument();
+    expect(screen.getAllByText('Configure Later (Preview Only)').length).toBeGreaterThanOrEqual(1);
+
+    // 3. Test Mode / Live Mode selector defaults to Test Mode
+    expect(screen.getByText('Test Mode (Default)')).toBeInTheDocument();
+
+    // 4. Select "Flowmint-Hosted Razorpay Checkout"
+    const hostedRadio = screen.getByRole('radio', { name: /Flowmint-Hosted Razorpay Checkout/i });
+    fireEvent.click(hostedRadio);
+
+    // 5. Leave credential fields blank to preserve existing configured credentials
+    // Click "Save Payment Configuration"
+    const saveBtn = screen.getByRole('button', { name: /Save Payment Configuration/i });
+    fireEvent.click(saveBtn);
+
+    // 6. Verify POST payload: payment_mode updated to razorpay_hosted, razorpay_mode is test, no empty secrets sent
+    await waitFor(() => {
+      expect(postPayload).not.toBeNull();
+      expect(postPayload.payment_mode).toBe('razorpay_hosted');
+      expect(postPayload.razorpay_mode).toBe('test');
+      expect(postPayload.razorpay_key_secret).toBeUndefined();
+    });
+
+    // 7. Verify UI refreshes with new mode
+    expect(await screen.findByText('Flowmint-Hosted Razorpay')).toBeInTheDocument();
   });
 });

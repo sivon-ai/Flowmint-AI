@@ -267,6 +267,14 @@ export interface PaymentConfig {
   webhook_url: string;
 }
 
+export interface PaymentConfigUpdateRequest {
+  payment_mode: 'store_native' | 'razorpay_reconciliation' | 'razorpay_hosted' | 'later' | string;
+  razorpay_key_id?: string;
+  razorpay_key_secret?: string;
+  razorpay_webhook_secret?: string;
+  razorpay_mode?: 'test' | 'live';
+}
+
 export interface StoreSyncStatus {
   connection_id: string;
   sync_status: 'idle' | 'running' | 'completed' | 'failed';

@@ -323,9 +323,16 @@ async def get_onboarding_status(
             store_connected=has_store,
             store_mode=onboarding_data.get("store_mode", active_conn.provider if active_conn else None),
             active_store=active_resp,
-            payment_mode=m_settings.get("payment_config", {}).get("mode"),
-            razorpay_mode=settings.razorpay_mode,
-            razorpay_configured=bool(settings.razorpay_key_id and settings.razorpay_key_secret),
+            payment_mode=(
+                m_settings.get("payment_config", {}).get("payment_mode")
+                or m_settings.get("payment_config", {}).get("mode")
+                or onboarding_data.get("payment_mode")
+            ),
+            razorpay_mode=m_settings.get("payment_config", {}).get("razorpay_mode") or settings.razorpay_mode,
+            razorpay_configured=bool(
+                (m_settings.get("payment_config", {}).get("razorpay_key_id") or settings.razorpay_key_id)
+                and (m_settings.get("payment_config", {}).get("razorpay_key_secret") or settings.razorpay_key_secret)
+            ),
         )
     )
 
