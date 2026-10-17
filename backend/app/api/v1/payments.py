@@ -29,10 +29,11 @@ async def initiate_payment(
     order_id: uuid.UUID,
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """Create a Razorpay order and return checkout details to frontend."""
     service = PaymentService(db)
-    result = await service.initiate(user.merchant_id, order_id)
+    result = await service.initiate(user.merchant_id, order_id, idempotency_key=idempotency_key)
     return ApiResponse.ok(result)
 
 

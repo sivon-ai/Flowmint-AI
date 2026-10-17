@@ -40,10 +40,14 @@ class PaymentService:
         self.db = db
 
     async def initiate(
-        self, merchant_id: uuid.UUID, order_id: uuid.UUID
+        self,
+        merchant_id: uuid.UUID,
+        order_id: uuid.UUID,
+        idempotency_key: str | None = None,
     ) -> RazorpayOrderResponse:
         """
         Create a Razorpay order and a Payment record.
+        Ensures idempotency, prevents duplicate pending payments, and never marks order as paid on failure.
         """
         # Get order
         result = await self.db.execute(
@@ -57,18 +61,6 @@ class PaymentService:
         if order.status != "pending":
             raise ValidationError(f"Order is in '{order.status}' status — cannot initiate payment")
 
-        # Check for existing pending payment
-        existing = await self.db.execute(
-            select(Payment).where(
-                Payment.order_id == order_id,
-                Payment.status.in_(["pending", "authorized"]),
-            )
-        )
-        if existing.scalar_one_or_none():
-            raise PaymentError("A payment is already in progress for this order")
-
-        # Create Razorpay order
-        amount_paise = int(order.total * 100)
         # Resolve merchant name and custom Razorpay keys if configured
         from app.models.merchant import Merchant
         from app.core.encryption import decrypt_credentials
@@ -79,8 +71,9 @@ class PaymentService:
         merchant = m_result.scalar_one_or_none()
         merchant_name = merchant.name if merchant else "Flowmint Store"
 
-        key_id = settings.razorpay_key_id
-        key_secret = settings.razorpay_key_secret
+        app_settings = get_settings()
+        key_id = app_settings.razorpay_key_id
+        key_secret = app_settings.razorpay_key_secret
         if merchant and merchant.settings and "payment_config" in merchant.settings:
             p_conf = merchant.settings["payment_config"]
             if p_conf.get("razorpay_key_id"):
@@ -92,6 +85,65 @@ class PaymentService:
                 except Exception as dec_err:
                     logger.warning("Could not decrypt merchant razorpay_key_secret: %s", dec_err)
 
+        amount_paise = int(order.total * 100)
+
+        # Check for existing pending or authorized payment for this order (prevent duplicate pending payments)
+        existing = await self.db.execute(
+            select(Payment).where(
+                Payment.order_id == order_id,
+                Payment.status.in_(["pending", "authorized"]),
+            )
+        )
+        existing_payment = existing.scalar_one_or_none()
+        if existing_payment:
+            # If an order already has an active provider order id, return existing details idempotently
+            if existing_payment.provider_order_id:
+                return RazorpayOrderResponse(
+                    payment_id=existing_payment.id,
+                    razorpay_order_id=existing_payment.provider_order_id,
+                    razorpay_key_id=key_id,
+                    amount=amount_paise,
+                    currency=order.currency,
+                    order_number=order.order_number,
+                    merchant_name=merchant_name,
+                )
+            raise PaymentError("A payment is already in progress for this order")
+
+        # Check idempotency key if explicitly supplied
+        actual_idempotency_key = idempotency_key or f"pay_{order_id}_{uuid.uuid4().hex[:12]}"
+        if idempotency_key:
+            existing_by_key = await self.db.execute(
+                select(Payment).where(
+                    Payment.merchant_id == merchant_id,
+                    Payment.idempotency_key == idempotency_key,
+                )
+            )
+            key_payment = existing_by_key.scalar_one_or_none()
+            if key_payment:
+                if key_payment.provider_order_id:
+                    return RazorpayOrderResponse(
+                        payment_id=key_payment.id,
+                        razorpay_order_id=key_payment.provider_order_id,
+                        razorpay_key_id=key_id,
+                        amount=amount_paise,
+                        currency=order.currency,
+                        order_number=order.order_number,
+                        merchant_name=merchant_name,
+                    )
+                raise PaymentError("A payment with this idempotency key is already in progress")
+
+        # Validate gateway credentials exist
+        error_ref = f"PAY-ERR-{uuid.uuid4().hex[:8].upper()}"
+        if not key_id or not key_secret:
+            logger.error(
+                "[%s] Missing Razorpay credentials for merchant %s (order %s)",
+                error_ref, merchant_id, order_id
+            )
+            raise PaymentError(
+                f"Payment provider configuration is incomplete. Please contact support with reference {error_ref}."
+            )
+
+        # Create Razorpay order via SDK
         try:
             import razorpay
             client = razorpay.Client(auth=(key_id, key_secret))
@@ -102,11 +154,20 @@ class PaymentService:
             })
             provider_order_id = rz_order["id"]
         except Exception as e:
-            logger.error(f"Razorpay order creation failed: {e}")
-            raise PaymentError(f"Payment provider error: {str(e)}")
+            logger.error(
+                "[%s] Razorpay order creation failed for merchant %s, order %s: %s",
+                error_ref, merchant_id, order_id, e,
+                exc_info=True,
+            )
+            # Safe customer error without leaking Python module names, tracebacks, or secrets
+            raise PaymentError(
+                f"Payment provider unavailable. Please try again or quote reference {error_ref} to support."
+            )
 
         # Create payment record
+        payment_id = uuid.uuid4()
         payment = Payment(
+            id=payment_id,
             order_id=order_id,
             merchant_id=merchant_id,
             amount=order.total,
@@ -114,7 +175,7 @@ class PaymentService:
             status="pending",
             provider="razorpay",
             provider_order_id=provider_order_id,
-            idempotency_key=idempotency_key,
+            idempotency_key=actual_idempotency_key,
         )
         self.db.add(payment)
 
@@ -354,7 +415,7 @@ class PaymentService:
             raise ValidationError("Invalid payment order reference.")
 
         # Determine secret
-        key_secret = settings.razorpay_key_secret
+        key_secret = get_settings().razorpay_key_secret
         from app.models.merchant import Merchant
         m_stmt = select(Merchant).where(Merchant.id == merchant_id)
         merchant = (await self.db.execute(m_stmt)).scalar_one_or_none()
