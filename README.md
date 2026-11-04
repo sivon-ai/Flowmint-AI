@@ -130,8 +130,11 @@ Flowmint AI uses Fireworks AI's Qwen 3.8 Max for live inference and native struc
 
 ### 2. Launch Local Infrastructure
 ```bash
-# Clone repository
-cd "Flowmint AI"
+git clone https://github.com/sivon-ai/Flowmint-AI.git
+cd Flowmint-AI
+
+# Create local configuration from the example
+cp .env.example .env
 
 # Start PostgreSQL and Redis containers
 docker compose up -d postgres redis
@@ -141,7 +144,8 @@ docker compose up -d postgres redis
 ```bash
 cd backend
 python -m venv .venv
-.venv\Scripts\activate       # Windows (.venv/bin/activate on Unix)
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
 python -m app.seed           # Seeds TechMart India with 37 carts, policies, products
